@@ -19,21 +19,22 @@ type RunRepresentation struct {
 }
 
 type JobRepresentation struct {
-	name        string
-	jobId       string
-	description string
-	runs        []RunRepresentation
+	name                 string
+	jobId                string
+	description          string
+	defaultRunConfigYaml string
+	runs                 []*RunRepresentation
 }
 
 type RepositoryRepresentation struct {
 	name     string
 	location string
-	jobs     map[string]JobRepresentation
+	jobs     map[string]*JobRepresentation
 }
 
 type Overview struct {
 	url          string
-	repositories map[string]RepositoryRepresentation
+	repositories map[string]*RepositoryRepresentation
 }
 
 func (o *Overview) GetRepositoryNames() []string {
@@ -59,27 +60,54 @@ func (o *Overview) AppendRepositories(repos []Repository) {
 		rep := new(RepositoryRepresentation)
 		rep.name = node.Name
 		rep.location = node.Location.Name
-		rep.jobs = make(map[string]JobRepresentation, 0)
+		rep.jobs = make(map[string]*JobRepresentation, 0)
 
-		o.repositories[rep.location] = *rep
+		o.repositories[rep.location] = rep
 	}
 }
 
 func (o *Overview) AppendJobsToRepository(location string, jobs []Job) {
 
 	for _, job := range jobs {
-		jr := new(JobRepresentation)
-		jr.name = job.Name
-		jr.description = job.Description
-		jr.jobId = job.JobId
-		jr.runs = make([]RunRepresentation, 0)
-		o.repositories[location].jobs[jr.name] = *jr
+		jobRep := new(JobRepresentation)
+		jobRep.name = job.Name
+		jobRep.description = job.Description
+		jobRep.defaultRunConfigYaml = ""
+		jobRep.jobId = job.JobId
+		jobRep.runs = make([]*RunRepresentation, 0)
+		o.repositories[location].jobs[jobRep.name] = jobRep
 	}
 
 }
 
+func (o *Overview) UpdatePipelineAndRuns(location string, pipeline PipelineOrError) {
+	selectedJob := o.repositories[location].jobs[pipeline.Name]
+	if len(pipeline.Presets) > 0 {
+		selectedJob.defaultRunConfigYaml = pipeline.Presets[0].RunConfigYaml
+	}
+	selectedJob.runs = make([]*RunRepresentation, 0)
+	for _, run := range(pipeline.Runs) {
+		runRep := new(RunRepresentation)
+		runRep.runId = run.RunId
+		runRep.startTime = run.StartTime
+		runRep.endTime = run.EndTime
+		runRep.runconfigYaml = run.RunConfigYaml
+		runRep.status = run.Status
+
+		selectedJob.runs = append(selectedJob.runs, runRep)
+	}
+}
+
+func (o *Overview) GetSortedRunNamesFor(location string, pipelineName string) []string {
+	runNames := make([]string, 0)
+	for _, run := range(o.repositories[location].jobs[pipelineName]).runs {
+		runNames = append(runNames, run.runId)
+	}
+	return runNames
+}
+
 func (o *Overview) GetRepoByLocation(location string) RepositoryRepresentation {
-	return o.repositories[location]
+	return *o.repositories[location]
 }
 
 var (
@@ -141,7 +169,7 @@ func LoadStateFromConfig(dir string) {
 
 func main() {
 
-	data.repositories = make(map[string]RepositoryRepresentation, 0)
+	data.repositories = make(map[string]*RepositoryRepresentation, 0)
 	data.url = ""
 
 	home, err := os.UserHomeDir()
@@ -425,19 +453,16 @@ func getElementByCursor(v *gocui.View) string {
 
 func loadRunsForJob(g *gocui.Gui, v *gocui.View) error {
 
-	jobName := getElementByCursor(v)
-
+	
 	r, _ := g.View(REPOSITORIES_VIEW)
 	locationName := getElementByCursor(r)
+	jobName := getElementByCursor(v)
 
 	repo := data.GetRepoByLocation(locationName)
-	
-	runNames = nil
+
 	pipelineRuns := GetPipelineRuns(repo, jobName, 10)
-	data.AppendJobsToRepository(repo.location, pipelineRuns)
-	for _, run := range  pipelineRuns.Runs {
-		runNames = append(runNames, run.RunId)
-	}
+	data.UpdatePipelineAndRuns(repo.location, pipelineRuns)
+	runNames = data.GetSortedRunNamesFor(locationName, jobName)
 	d, _ := g.View(RUNS_VIEW)
 	d.Title = fmt.Sprintf("%s - Runs", jobName)
 	d.Clear()

@@ -43,14 +43,15 @@ type JobsResponse struct {
 	} `json:"data"`
 }
 
+type Preset struct {
+	RunConfigYaml string `json:"runConfigYaml"`
+}
+
 type PipelineOrError struct {
-	Id      string `json:"id"`
-	Name    string `json:"name"`
-	Presets struct {
-		// solidSelection ???
-		RunConfigYaml string `json:"runConfigYaml"`
-	} `json:"presets"`
-	Runs []Run `json:"runs"`
+	Id      string   `json:"id"`
+	Name    string   `json:"name"`
+	Presets []Preset `json:"presets"`
+	Runs    []Run    `json:"runs"`
 }
 
 type RunsResponse struct {
@@ -170,7 +171,6 @@ func GetPipelineRuns(repository RepositoryRepresentation, jobName string, limit 
 		id
 		name
 		presets {
-				solidSelection
 				runConfigYaml
 		}
 		runs(
