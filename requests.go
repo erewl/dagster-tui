@@ -8,71 +8,14 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	s"nl/vdb/dagstertui/datastructures"
 )
-
-type Repository struct {
-	Name     string `json:"name"`
-	Location struct {
-		Name string `json:"name"`
-	} `json:"location"`
-}
-
-type RepositoriesResponse struct {
-	Data struct {
-		RepositoriesOrError struct {
-			Nodes []Repository `json:"nodes"`
-		} `json:"repositoriesOrError"`
-	} `json:"data"`
-}
-
-type Jobs struct {
-	name string
-}
-
-type Job struct {
-	Name        string `json:"name"`
-	JobId       string `json:"id"`
-	Description string `json:"description"`
-}
-
-type JobsResponse struct {
-	Data struct {
-		RepositoriesOrError struct {
-			Jobs []Job `json:"jobs"`
-		} `json:"repositoryOrError"`
-	} `json:"data"`
-}
-
-type Preset struct {
-	RunConfigYaml string `json:"runConfigYaml"`
-}
-
-type PipelineOrError struct {
-	Id      string   `json:"id"`
-	Name    string   `json:"name"`
-	Presets []Preset `json:"presets"`
-	Runs    []Run    `json:"runs"`
-}
-
-type RunsResponse struct {
-	Data struct {
-		PipelineOrError PipelineOrError `json:"pipelineOrError"`
-	} `json:"data"`
-}
-
-type Run struct {
-	RunId         string  `json:"runId"`
-	StartTime     float64 `json:"startTime"`
-	EndTime       float64 `json:"endTime"`
-	Status        string  `json:"status"`
-	RunConfigYaml string  `json:"runConfigYaml"`
-}
 
 const (
 	URL = "https://dagster.test-backend.vdbinfra.nl/graphql"
 )
 
-func GetRepositories() []Repository {
+func GetRepositories() []s.Repository {
 
 	query := "query RepositoriesQuery { repositoriesOrError { ... on RepositoryConnection { nodes { name location { name }}}}}"
 	var reqStr = []byte(fmt.Sprintf(`{ 
@@ -96,7 +39,7 @@ func GetRepositories() []Repository {
 		log.Fatalf("Failed to read response body: %v", err)
 	}
 
-	var response RepositoriesResponse
+	var response s.RepositoriesResponse
 	if err := json.Unmarshal([]byte(jsonData), &response); err != nil {
 		log.Fatalf("Failed to parse JSON: %v, %s", err, string(jsonData))
 	}
@@ -105,7 +48,7 @@ func GetRepositories() []Repository {
 	return repos
 }
 
-func GetJobsInRepository(repository RepositoryRepresentation) []Job {
+func GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
 	re := regexp.MustCompile(`[\s]`)
 	query := `query JobsQuery($repositoryLocationName: String!, $repositoryName: String!) {
 	repositoryOrError(
@@ -126,7 +69,7 @@ func GetJobsInRepository(repository RepositoryRepresentation) []Job {
 	str := fmt.Sprintf(`{
 		"query": "%s",
 		"variables": { "repositoryName": "%s", "repositoryLocationName": "%s" }
-	}`, query, repository.name, repository.location)
+	}`, query, repository.Name, repository.Location)
 
 	var reqStr = []byte(str)
 	req, reqErr := http.NewRequest("POST", URL, bytes.NewBuffer(reqStr))
@@ -148,7 +91,7 @@ func GetJobsInRepository(repository RepositoryRepresentation) []Job {
 		log.Fatalf("Failed to read response body: %v", err)
 	}
 
-	var response JobsResponse
+	var response s.JobsResponse
 	if err := json.Unmarshal([]byte(jsonData), &response); err != nil {
 		log.Fatalln(string(jsonData))
 		log.Fatalf("Failed to parse JSON: %v", err)
@@ -158,7 +101,7 @@ func GetJobsInRepository(repository RepositoryRepresentation) []Job {
 	return jobs
 }
 
-func GetPipelineRuns(repository RepositoryRepresentation, jobName string, limit int) PipelineOrError {
+func GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limit int) s.PipelineOrError {
 	query := fmt.Sprintf(`query RunIdsQuery {
 	pipelineOrError(
 		params: {
@@ -187,7 +130,7 @@ func GetPipelineRuns(repository RepositoryRepresentation, jobName string, limit 
 		...on PipelineNotFoundError {
 		message
 		}
-	}}`, repository.name, jobName, repository.location, limit)
+	}}`, repository.Name, jobName, repository.Location, limit)
 	query = regexp.MustCompile(`[\s]`).ReplaceAllString(query, " ")
 	query = regexp.MustCompile(`"`).ReplaceAllString(query, `\"`)
 
@@ -212,7 +155,7 @@ func GetPipelineRuns(repository RepositoryRepresentation, jobName string, limit 
 		log.Fatalf("Failed to read response body: %v", err)
 	}
 
-	var response RunsResponse
+	var response s.RunsResponse
 	if err := json.Unmarshal([]byte(jsonData), &response); err != nil {
 		log.Fatalf("Failed to parse JSON: %v, %s", err, string(jsonData))
 	}
@@ -222,7 +165,7 @@ func GetPipelineRuns(repository RepositoryRepresentation, jobName string, limit 
 	return pipelineOrError
 }
 
-func LaunchRunForJob(repository Repository, jobName string, runConfigYaml string) error {
+func LaunchRunForJob(repository s.Repository, jobName string, runConfigYaml string) error {
 	query := `mutation LaunchRunMutation(
 		$repositoryLocationName: String!
 		$repositoryName: String!
