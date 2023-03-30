@@ -8,7 +8,7 @@ func Quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-func cursorDown(g *gocui.Gui, v *gocui.View) error {
+func CursorDown(g *gocui.Gui, v *gocui.View) error {
 	items := getContentByView(v)
 	cx, cy := v.Cursor()
 	_, h := v.Size()
@@ -37,7 +37,7 @@ func cursorDown(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func cursorUp(g *gocui.Gui, v *gocui.View) error {
+func CursorUp(g *gocui.Gui, v *gocui.View) error {
 	items := getContentByView(v)
 	cx, cy := v.Cursor()
 	_, h := v.Size()
@@ -67,8 +67,7 @@ func cursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-
-func setFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
+func SetFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
 	// Set focus on next view
 	_, err := g.SetCurrentView(newViewName)
 	if err != nil {
@@ -86,7 +85,7 @@ func setFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
 	return nil
 }
 
-func switchFocusRight(g *gocui.Gui, v *gocui.View) error {
+func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
 	// Get current view name
 	currentViewName := v.Name()
 
@@ -101,12 +100,14 @@ func switchFocusRight(g *gocui.Gui, v *gocui.View) error {
 		nextViewName = REPOSITORIES_VIEW
 	case KEY_MAPPINGS_VIEW:
 		nextViewName = KEY_MAPPINGS_VIEW
+	case LAUNCH_RUN_VIEW:
+		nextViewName = LAUNCH_RUN_VIEW
 	}
 
-	return setFocus(g, nextViewName, currentViewName)
+	return SetFocus(g, nextViewName, currentViewName)
 }
 
-func switchFocusLeft(g *gocui.Gui, v *gocui.View) error {
+func SwitchFocusLeft(g *gocui.Gui, v *gocui.View) error {
 	// Get current view name
 	currentViewName := v.Name()
 
@@ -121,7 +122,9 @@ func switchFocusLeft(g *gocui.Gui, v *gocui.View) error {
 		previousViewName = JOBS_VIEW
 	case KEY_MAPPINGS_VIEW:
 		previousViewName = KEY_MAPPINGS_VIEW
+	case LAUNCH_RUN_VIEW:
+		previousViewName = LAUNCH_RUN_VIEW
 	}
 
-	return setFocus(g, previousViewName, currentViewName)
+	return SetFocus(g, previousViewName, currentViewName)
 }
