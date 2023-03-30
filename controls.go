@@ -88,6 +88,7 @@ func SetFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
 func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
 	// Get current view name
 	currentViewName := v.Name()
+	State.previousActiveWindow = currentViewName
 
 	// Get next view name
 	nextViewName := ""
@@ -110,6 +111,7 @@ func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
 func SwitchFocusLeft(g *gocui.Gui, v *gocui.View) error {
 	// Get current view name
 	currentViewName := v.Name()
+	State.previousActiveWindow = currentViewName
 
 	// Get previous view name
 	previousViewName := ""

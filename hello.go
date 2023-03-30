@@ -19,6 +19,7 @@ var (
 	LaunchRunWindow  *gocui.View
 
 	data *s.Overview
+	State *ApplicationState
 
 	currentRepositoriesList []string
 	currentJobsList         []string
@@ -36,6 +37,15 @@ const (
 	KEY_MAPPINGS_VIEW = "keymaps"
 	LAUNCH_RUN_VIEW   = "launch_run"
 )
+
+
+type ApplicationState struct {
+
+	previousActiveWindow string
+	selectedRepo string
+	selectedJob string
+	selectedRun string
+}
 
 func FillViewWithItems(v *gocui.View, items []string) {
 	v.Clear()
@@ -75,6 +85,12 @@ func main() {
 	data = new(s.Overview)
 	data.Repositories = make(map[string]*s.RepositoryRepresentation, 0)
 	data.Url = ""
+
+	State = new(ApplicationState)
+	State.previousActiveWindow = ""
+	State.selectedRepo = ""
+	State.selectedJob = ""
+	State.selectedRun = ""
 
 	home, err := os.UserHomeDir()
 	userHomeDir = home
@@ -233,7 +249,11 @@ func OpenLaunchWindow(g *gocui.Gui, v *gocui.View) error {
 	}
 	LaunchRunWindow.Editable = true
 	LaunchRunWindow.Title = "Launch Run For"
+	LaunchRunWindow.Highlight = true
 
+	fmt.Fprintln(LaunchRunWindow, data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml)
+
+	State.previousActiveWindow = v.Name()
 	g.SetCurrentView(LAUNCH_RUN_VIEW)
 	return nil
 }
@@ -242,7 +262,7 @@ func ClosePopupView(g *gocui.Gui, v *gocui.View) error {
 	if err := g.DeleteView(v.Name()); err != nil {
 		return err
 	}
-	g.SetCurrentView(REPOSITORIES_VIEW)
+	g.SetCurrentView(State.previousActiveWindow)
 	return nil
 }
 
@@ -263,12 +283,16 @@ func setKeybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", 'x', gocui.ModNone, OpenKeyMaps); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(KEY_MAPPINGS_VIEW, 'X', gocui.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(KEY_MAPPINGS_VIEW, gocui.KeyCtrlX, gocui.ModNone, ClosePopupView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, 'X', gocui.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, gocui.KeyCtrlX, gocui.ModNone, ClosePopupView); err != nil {
 		return err
 	}
+	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, gocui.KeyEnter, gocui.ModNone, ValidateAndLaunchRun); err != nil {
+		return err
+	}
+
 
 	// define keybindings for moving between items
 	if err := g.SetKeybinding(REPOSITORIES_VIEW, gocui.KeyArrowDown, gocui.ModNone, CursorDown); err != nil {
@@ -303,6 +327,9 @@ func setKeybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding(RUNS_VIEW, 'l', gocui.ModNone, OpenLaunchWindow); err != nil {
 		panic(err)
 	}
+	// if err := g.SetKeybinding(RUNS_VIEW, 'i', gocui.ModNone, InspectCurrentRunConfig); err != nil {
+		// panic(err)
+	// }
 
 	return nil
 }
@@ -342,6 +369,7 @@ func getContentByView(v *gocui.View) []string {
 func LoadJobsForRepository(g *gocui.Gui, v *gocui.View) error {
 
 	locationName := getElementByCursor(v)
+	State.selectedRepo = locationName
 
 	repo := data.GetRepoByLocation(locationName)
 
@@ -368,21 +396,27 @@ func getElementByCursor(v *gocui.View) string {
 
 func LoadRunsForJob(g *gocui.Gui, v *gocui.View) error {
 
-	locationName := getElementByCursor(RepositoriesView)
 	jobName := getElementByCursor(v)
+	State.selectedJob = jobName
 
-	repo := data.GetRepoByLocation(locationName)
+	repo := data.GetRepoByLocation(State.selectedRepo)
 
-	pipelineRuns := GetPipelineRuns(repo, jobName, 10)
+	pipelineRuns := GetPipelineRuns(repo, State.selectedJob, 10)
 	data.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
-	runNames = data.GetSortedRunNamesFor(locationName, jobName)
+	runNames = data.GetSortedRunNamesFor(State.selectedRepo, State.selectedJob)
 
-	RunsView.Title = fmt.Sprintf("%s - Runs", jobName)
+	RunsView.Title = fmt.Sprintf("%s - Runs", State.selectedJob)
 	RunsView.Clear()
 	FillViewWithItems(RunsView, runNames)
 
 	resetCursor(g, RUNS_VIEW)
 	return SetFocus(g, RUNS_VIEW, v.Name())
+}
+
+func ValidateAndLaunchRun(g *gocui.Gui, v *gocui.View) error {
+
+
+	return nil
 }
 
 func resetCursor(g *gocui.Gui, name string) error {
