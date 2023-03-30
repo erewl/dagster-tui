@@ -7,8 +7,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	s "nl/vdb/dagstertui/datastructures"
 	"regexp"
-	s"nl/vdb/dagstertui/datastructures"
+	"strings"
 )
 
 const (
@@ -165,7 +166,7 @@ func GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limi
 	return pipelineOrError
 }
 
-func LaunchRunForJob(repository s.Repository, jobName string, runConfigYaml string) error {
+func LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runConfigYamlLines []string) string {
 	query := `mutation LaunchRunMutation(
 		$repositoryLocationName: String!
 		$repositoryName: String!
@@ -205,7 +206,7 @@ func LaunchRunForJob(repository s.Repository, jobName string, runConfigYaml stri
 	str := fmt.Sprintf(`{
 		"query": "%s",
 		"variables": { "repositoryName": "%s", "repositoryLocationName": "%s" , "jobName": "%s", "runConfigData": "%s"}
-	}`, query, repository.Name, repository.Location.Name, jobName, runConfigYaml)
+	}`, query, repository.Name, repository.Location, jobName, strings.Join(runConfigYamlLines, "\\n"))
 
 	var reqStr = []byte(str)
 	req, reqErr := http.NewRequest("POST", URL, bytes.NewBuffer(reqStr))
@@ -226,12 +227,10 @@ func LaunchRunForJob(repository s.Repository, jobName string, runConfigYaml stri
 		log.Fatalf("Failed to read response body: %v", err)
 	}
 
-	var response string
+	var response s.LaunchRunResponse
 	if err := json.Unmarshal([]byte(jsonData), &response); err != nil {
 		log.Fatalf("Failed to parse JSON: %v, %s", err, string(jsonData))
 	}
 
-	fmt.Println(response)
-
-	return nil
+	return response.Data.LaunchRun.Run.RunId
 }

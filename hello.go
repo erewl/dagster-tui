@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	s "nl/vdb/dagstertui/datastructures"
 
@@ -17,8 +18,9 @@ var (
 	RunsView         *gocui.View
 	KeyMappingsView  *gocui.View
 	LaunchRunWindow  *gocui.View
+	FeedbackView     *gocui.View
 
-	data *s.Overview
+	data  *s.Overview
 	State *ApplicationState
 
 	currentRepositoriesList []string
@@ -36,15 +38,14 @@ const (
 	RUNS_VIEW         = "runs"
 	KEY_MAPPINGS_VIEW = "keymaps"
 	LAUNCH_RUN_VIEW   = "launch_run"
+	FEEDBACK_VIEW     = "feedback"
 )
 
-
 type ApplicationState struct {
-
 	previousActiveWindow string
-	selectedRepo string
-	selectedJob string
-	selectedRun string
+	selectedRepo         string
+	selectedJob          string
+	selectedRun          string
 }
 
 func FillViewWithItems(v *gocui.View, items []string) {
@@ -129,23 +130,21 @@ func main() {
 	currentRepositoriesList = data.GetRepositoryNames()
 	FillViewWithItems(RepositoriesView, currentRepositoriesList)
 
-	RepositoriesView.SelFgColor = gocui.AttrBold
-	RepositoriesView.SelBgColor = gocui.ColorRed
-	RepositoriesView.Wrap = true
-
-	JobsView.SelFgColor = gocui.AttrBold
-	JobsView.SelBgColor = gocui.ColorRed
-	JobsView.Wrap = true
-
-	RunsView.SelFgColor = gocui.AttrBold
-	RunsView.SelBgColor = gocui.ColorRed
-	RunsView.Wrap = true
+	setupView(RepositoriesView)
+	setupView(JobsView)
+	setupView(RunsView)
 
 	// Start main loop
 	err = g.MainLoop()
 	if err != nil && err != gocui.ErrQuit {
 		panic(err)
 	}
+}
+
+func setupView(v *gocui.View) {
+	v.SelFgColor = gocui.AttrBold
+	v.SelBgColor = gocui.ColorRed
+	v.Wrap = true
 }
 
 func setupViews(g *gocui.Gui) error {
@@ -250,6 +249,7 @@ func OpenLaunchWindow(g *gocui.Gui, v *gocui.View) error {
 	LaunchRunWindow.Editable = true
 	LaunchRunWindow.Title = "Launch Run For"
 	LaunchRunWindow.Highlight = true
+	LaunchRunWindow.SelFgColor = gocui.ColorYellow
 
 	fmt.Fprintln(LaunchRunWindow, data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml)
 
@@ -293,7 +293,6 @@ func setKeybindings(g *gocui.Gui) error {
 		return err
 	}
 
-
 	// define keybindings for moving between items
 	if err := g.SetKeybinding(REPOSITORIES_VIEW, gocui.KeyArrowDown, gocui.ModNone, CursorDown); err != nil {
 		panic(err)
@@ -328,7 +327,7 @@ func setKeybindings(g *gocui.Gui) error {
 		panic(err)
 	}
 	// if err := g.SetKeybinding(RUNS_VIEW, 'i', gocui.ModNone, InspectCurrentRunConfig); err != nil {
-		// panic(err)
+	// panic(err)
 	// }
 
 	return nil
@@ -415,6 +414,8 @@ func LoadRunsForJob(g *gocui.Gui, v *gocui.View) error {
 
 func ValidateAndLaunchRun(g *gocui.Gui, v *gocui.View) error {
 
+	runId := LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
+	ClosePopupView(g, LaunchRunWindow)
 
 	return nil
 }

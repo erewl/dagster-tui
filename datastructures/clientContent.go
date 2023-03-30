@@ -1,6 +1,5 @@
 package datastructures
 
-
 type Repository struct {
 	Name     string `json:"name"`
 	Location struct {
@@ -13,6 +12,16 @@ type RepositoriesResponse struct {
 		RepositoriesOrError struct {
 			Nodes []Repository `json:"nodes"`
 		} `json:"repositoriesOrError"`
+	} `json:"data"`
+}
+
+type LaunchRunResponse struct {
+	Data struct {
+		LaunchRun struct {
+			Run struct {
+				RunId string `json:"runId"`
+			} `json:"run"`
+		} `json:"launchRun"`
 	} `json:"data"`
 }
 
