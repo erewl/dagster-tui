@@ -9,7 +9,7 @@ func Quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func CursorDown(g *gocui.Gui, v *gocui.View) error {
-	items := getContentByView(v)
+	items := GetContentByView(v)
 	cx, cy := v.Cursor()
 	_, h := v.Size()
 	var height = h
@@ -38,7 +38,7 @@ func CursorDown(g *gocui.Gui, v *gocui.View) error {
 }
 
 func CursorUp(g *gocui.Gui, v *gocui.View) error {
-	items := getContentByView(v)
+	items := GetContentByView(v)
 	cx, cy := v.Cursor()
 	_, h := v.Size()
 	oX, oY := v.Origin()
@@ -75,10 +75,10 @@ func SetFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
 	}
 
 	// Set background color of active window to red, and background color of inactive windows to default
-	if err := setWindowColors(g, newViewName, "red"); err != nil {
+	if err := SetWindowColors(g, newViewName, "red"); err != nil {
 		return err
 	}
-	if err := setWindowColors(g, oldViewName, ""); err != nil {
+	if err := SetWindowColors(g, oldViewName, ""); err != nil {
 		return err
 	}
 

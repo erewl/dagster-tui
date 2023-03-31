@@ -3,13 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strings"
-
-	s "nl/vdb/dagstertui/datastructures"
-
 	"github.com/jroimartin/gocui"
+	"io/ioutil"
+	s "nl/vdb/dagstertui/datastructures"
+	"os"
+	"os/exec"
+	"runtime"
 )
 
 var (
@@ -26,7 +25,6 @@ var (
 	currentRepositoriesList []string
 	currentJobsList         []string
 
-	runs     []s.Run
 	runNames []string
 
 	userHomeDir string
@@ -46,15 +44,6 @@ type ApplicationState struct {
 	selectedRepo         string
 	selectedJob          string
 	selectedRun          string
-}
-
-func FillViewWithItems(v *gocui.View, items []string) {
-	v.Clear()
-
-	for _, item := range items {
-		fmt.Fprintln(v, item)
-	}
-
 }
 
 type ConfigState struct {
@@ -118,7 +107,7 @@ func main() {
 	g.Highlight = true
 
 	// called once
-	setupViews(g)
+	InitializeViews(g)
 
 	// loading latest saved config
 	LoadStateFromConfig(userHomeDir)
@@ -126,13 +115,13 @@ func main() {
 		data.AppendRepositories(GetRepositories())
 	}
 
-	setWindowColors(g, REPOSITORIES_VIEW, "red")
+	SetWindowColors(g, REPOSITORIES_VIEW, "red")
 	currentRepositoriesList = data.GetRepositoryNames()
 	FillViewWithItems(RepositoriesView, currentRepositoriesList)
 
-	setupView(RepositoriesView)
-	setupView(JobsView)
-	setupView(RunsView)
+	SetViewStyles(RepositoriesView)
+	SetViewStyles(JobsView)
+	SetViewStyles(RunsView)
 
 	// Start main loop
 	err = g.MainLoop()
@@ -141,13 +130,13 @@ func main() {
 	}
 }
 
-func setupView(v *gocui.View) {
+func SetViewStyles(v *gocui.View) {
 	v.SelFgColor = gocui.AttrBold
 	v.SelBgColor = gocui.ColorRed
 	v.Wrap = true
 }
 
-func setupViews(g *gocui.Gui) error {
+func InitializeViews(g *gocui.Gui) error {
 	// Set window sizes and positions
 	maxX, maxY := g.Size()
 	windowWidth := maxX / 3
@@ -220,6 +209,57 @@ func layout(g *gocui.Gui) error {
 	return nil
 }
 
+func openbrowser(url string) {
+
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	if err != nil {
+		panic(err)
+	}
+}
+
+func OpenInBrowser(g *gocui.Gui, v *gocui.View) error {
+
+	url := "https://dagster.test-backend.vdbinfra.nl"
+
+	switch v.Name() {
+	case REPOSITORIES_VIEW:
+		// https://dagster.test-backend.vdbinfra.nl/locations/supply_forecasting_repo@supply-forecasting-pr-2168/jobs
+		repo := State.selectedRepo
+		if repo != "" {
+			r := data.Repositories[repo]
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs", url, r.Name, r.Location))
+		}
+		return nil
+	case JOBS_VIEW:
+		// https://dagster.test-backend.vdbinfra.nl/locations/supply_forecasting_repo@supply-forecasting-pr-2168/jobs/e2e
+		repo := State.selectedRepo
+		job := State.selectedJob
+		if repo != "" && job != "" {
+			r := data.Repositories[repo]
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s", url, r.Name, r.Location, job))
+		}
+		return nil
+	case RUNS_VIEW:
+		runId := State.selectedRun
+		if runId != "" {
+			openbrowser(fmt.Sprintf("%s/runs/%s", url, runId))
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
 func OpenKeyMaps(g *gocui.Gui, v *gocui.View) error {
 	maxX, maxY := g.Size()
 
@@ -283,6 +323,9 @@ func setKeybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", 'x', gocui.ModNone, OpenKeyMaps); err != nil {
 		return err
 	}
+	if err := g.SetKeybinding("", 'O', gocui.ModNone, OpenInBrowser); err != nil {
+		return err
+	}
 	if err := g.SetKeybinding(KEY_MAPPINGS_VIEW, gocui.KeyCtrlX, gocui.ModNone, ClosePopupView); err != nil {
 		return err
 	}
@@ -333,7 +376,53 @@ func setKeybindings(g *gocui.Gui) error {
 	return nil
 }
 
-func setWindowColors(g *gocui.Gui, viewName string, bgColor string) error {
+func LoadJobsForRepository(g *gocui.Gui, v *gocui.View) error {
+
+	locationName := GetElementByCursor(v)
+	State.selectedRepo = locationName
+
+	repo := data.GetRepoByLocation(locationName)
+
+	data.AppendJobsToRepository(repo.Location, GetJobsInRepository(repo))
+
+	JobsView.Title = fmt.Sprintf("%s - Jobs", locationName)
+	JobsView.Clear()
+	currentJobsList = data.GetJobNamesInRepository(locationName)
+	FillViewWithItems(JobsView, currentJobsList)
+
+	ResetCursor(g, JOBS_VIEW)
+	return SetFocus(g, JOBS_VIEW, v.Name())
+
+}
+
+func LoadRunsForJob(g *gocui.Gui, v *gocui.View) error {
+
+	jobName := GetElementByCursor(v)
+	State.selectedJob = jobName
+
+	repo := data.GetRepoByLocation(State.selectedRepo)
+
+	pipelineRuns := GetPipelineRuns(repo, State.selectedJob, 10)
+	data.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
+	runNames = data.GetSortedRunNamesFor(State.selectedRepo, State.selectedJob)
+
+	RunsView.Title = fmt.Sprintf("%s - Runs", State.selectedJob)
+	RunsView.Clear()
+	FillViewWithItems(RunsView, runNames)
+
+	ResetCursor(g, RUNS_VIEW)
+	return SetFocus(g, RUNS_VIEW, v.Name())
+}
+
+func ValidateAndLaunchRun(g *gocui.Gui, v *gocui.View) error {
+
+	// runId := LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
+	ClosePopupView(g, LaunchRunWindow)
+
+	return nil
+}
+
+func SetWindowColors(g *gocui.Gui, viewName string, bgColor string) error {
 	view, err := g.View(viewName)
 	if err != nil {
 		return err
@@ -350,7 +439,16 @@ func setWindowColors(g *gocui.Gui, viewName string, bgColor string) error {
 	return nil
 }
 
-func getContentByView(v *gocui.View) []string {
+func FillViewWithItems(v *gocui.View, items []string) {
+	v.Clear()
+
+	for _, item := range items {
+		fmt.Fprintln(v, item)
+	}
+
+}
+
+func GetContentByView(v *gocui.View) []string {
 
 	name := v.Name()
 	switch name {
@@ -365,62 +463,16 @@ func getContentByView(v *gocui.View) []string {
 
 }
 
-func LoadJobsForRepository(g *gocui.Gui, v *gocui.View) error {
-
-	locationName := getElementByCursor(v)
-	State.selectedRepo = locationName
-
-	repo := data.GetRepoByLocation(locationName)
-
-	data.AppendJobsToRepository(repo.Location, GetJobsInRepository(repo))
-
-	JobsView.Title = fmt.Sprintf("%s - Jobs", locationName)
-	JobsView.Clear()
-	currentJobsList = data.GetJobNamesInRepository(locationName)
-	FillViewWithItems(JobsView, currentJobsList)
-
-	resetCursor(g, JOBS_VIEW)
-	return SetFocus(g, JOBS_VIEW, v.Name())
-
-}
-
-func getElementByCursor(v *gocui.View) string {
+func GetElementByCursor(v *gocui.View) string {
 	_, oy := v.Origin()
 	_, vy := v.Cursor()
 
-	items := getContentByView(v)
+	items := GetContentByView(v)
 
 	return items[vy+oy]
 }
 
-func LoadRunsForJob(g *gocui.Gui, v *gocui.View) error {
-
-	jobName := getElementByCursor(v)
-	State.selectedJob = jobName
-
-	repo := data.GetRepoByLocation(State.selectedRepo)
-
-	pipelineRuns := GetPipelineRuns(repo, State.selectedJob, 10)
-	data.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
-	runNames = data.GetSortedRunNamesFor(State.selectedRepo, State.selectedJob)
-
-	RunsView.Title = fmt.Sprintf("%s - Runs", State.selectedJob)
-	RunsView.Clear()
-	FillViewWithItems(RunsView, runNames)
-
-	resetCursor(g, RUNS_VIEW)
-	return SetFocus(g, RUNS_VIEW, v.Name())
-}
-
-func ValidateAndLaunchRun(g *gocui.Gui, v *gocui.View) error {
-
-	runId := LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
-	ClosePopupView(g, LaunchRunWindow)
-
-	return nil
-}
-
-func resetCursor(g *gocui.Gui, name string) error {
+func ResetCursor(g *gocui.Gui, name string) error {
 	v, err := g.View(name)
 	if err != nil {
 		return err
