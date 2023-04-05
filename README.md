@@ -3,3 +3,9 @@
 ```
 go install
 ```
+
+and running application with:
+
+```
+~/go/bin/dagsterui
+```
