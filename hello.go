@@ -3,21 +3,24 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jroimartin/gocui"
 	"io/ioutil"
 	s "nl/vdb/dagstertui/datastructures"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
+	"strings"
+
+	c "github.com/jroimartin/gocui"
 )
 
 var (
-	RepositoriesView *gocui.View
-	JobsView         *gocui.View
-	RunsView         *gocui.View
-	KeyMappingsView  *gocui.View
-	LaunchRunWindow  *gocui.View
-	FeedbackView     *gocui.View
+	RepositoriesView *c.View
+	JobsView         *c.View
+	RunsView         *c.View
+	KeyMappingsView  *c.View
+	LaunchRunWindow  *c.View
+	FeedbackView     *c.View
 
 	data  *s.Overview
 	State *ApplicationState
@@ -86,7 +89,7 @@ func main() {
 	userHomeDir = home
 
 	// Initialize gocui
-	g, err := gocui.NewGui(gocui.Output256)
+	g, err := c.NewGui(c.Output256)
 	if err != nil {
 		panic(err)
 	}
@@ -102,8 +105,8 @@ func main() {
 		panic(err)
 	}
 
-	g.SelFgColor = gocui.ColorGreen | gocui.AttrBold
-	g.BgColor = gocui.ColorDefault
+	g.SelFgColor = c.ColorGreen | c.AttrBold
+	g.BgColor = c.ColorDefault
 	g.Highlight = true
 
 	// called once
@@ -125,18 +128,18 @@ func main() {
 
 	// Start main loop
 	err = g.MainLoop()
-	if err != nil && err != gocui.ErrQuit {
+	if err != nil && err != c.ErrQuit {
 		panic(err)
 	}
 }
 
-func SetViewStyles(v *gocui.View) {
-	v.SelFgColor = gocui.AttrBold
-	v.SelBgColor = gocui.ColorRed
+func SetViewStyles(v *c.View) {
+	v.SelFgColor = c.AttrBold
+	v.SelBgColor = c.ColorRed
 	v.Wrap = true
 }
 
-func InitializeViews(g *gocui.Gui) error {
+func InitializeViews(g *c.Gui) error {
 	// Set window sizes and positions
 	maxX, maxY := g.Size()
 	windowWidth := maxX / 3
@@ -149,7 +152,7 @@ func InitializeViews(g *gocui.Gui) error {
 	var err error
 	RepositoriesView, err = g.SetView(REPOSITORIES_VIEW, window1X, 1, window1X+windowWidth, windowHeight+1)
 	if err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
@@ -157,7 +160,7 @@ func InitializeViews(g *gocui.Gui) error {
 
 	JobsView, err = g.SetView(JOBS_VIEW, window2X, 1, window2X+windowWidth, windowHeight+1)
 	if err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
@@ -165,7 +168,7 @@ func InitializeViews(g *gocui.Gui) error {
 
 	RunsView, err = g.SetView(RUNS_VIEW, window3X, 1, window3X+windowWidth, windowHeight+1)
 	if err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
@@ -180,7 +183,7 @@ func InitializeViews(g *gocui.Gui) error {
 }
 
 // repeated call with every change (render)
-func layout(g *gocui.Gui) error {
+func layout(g *c.Gui) error {
 	// Set window sizes and positions
 	maxX, maxY := g.Size()
 	windowWidth := maxX / 3
@@ -191,17 +194,17 @@ func layout(g *gocui.Gui) error {
 
 	// Create windows
 	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, 1, window1X+windowWidth, windowHeight+1); err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
 	if _, err := g.SetView(JOBS_VIEW, window2X, 1, window2X+windowWidth, windowHeight+1); err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
 	if _, err := g.SetView(RUNS_VIEW, window3X, 1, window3X+windowWidth, windowHeight+1); err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
@@ -227,7 +230,7 @@ func openbrowser(url string) {
 	}
 }
 
-func OpenInBrowser(g *gocui.Gui, v *gocui.View) error {
+func OpenInBrowser(g *c.Gui, v *c.View) error {
 
 	url := "https://dagster.test-backend.vdbinfra.nl"
 
@@ -246,11 +249,14 @@ func OpenInBrowser(g *gocui.Gui, v *gocui.View) error {
 		job := State.selectedJob
 		if repo != "" && job != "" {
 			r := data.Repositories[repo]
-			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s", url, r.Name, r.Location, job))
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s/playground", url, r.Name, r.Location, job))
 		}
 		return nil
 	case RUNS_VIEW:
 		runId := State.selectedRun
+		if runId == "" {
+			runId = GetElementByCursor(RunsView)
+		}
 		if runId != "" {
 			openbrowser(fmt.Sprintf("%s/runs/%s", url, runId))
 		}
@@ -260,13 +266,13 @@ func OpenInBrowser(g *gocui.Gui, v *gocui.View) error {
 	}
 }
 
-func OpenKeyMaps(g *gocui.Gui, v *gocui.View) error {
+func OpenKeyMaps(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
 	var err error
 	KeyMappingsView, err = g.SetView(KEY_MAPPINGS_VIEW, int(float64(maxX)*0.2), int(float64(maxY)*0.2), int(float64(maxX)*0.8), int(float64(maxY)*0.8))
 	if err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
@@ -276,20 +282,58 @@ func OpenKeyMaps(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func OpenLaunchWindow(g *gocui.Gui, v *gocui.View) error {
+var DefaultEditor c.Editor = c.EditorFunc(simpleEditor)
+
+func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
+	switch {
+	case ch != 0 && mod == 0:
+		v.EditWrite(ch)
+	case key == c.KeyArrowDown:
+		v.MoveCursor(0, 1, true)
+	case key == c.KeyArrowUp:
+		v.MoveCursor(0, -1, true)
+	case key == c.KeyArrowLeft:
+		v.MoveCursor(-1, 0, true)
+	case key == c.KeyArrowRight:
+		v.MoveCursor(1, 0, true)
+	case key == '/' && mod == 1:
+		x, y := v.Cursor()
+		fmt.Print(x, y)
+		currentLine, _ := v.Line(y)
+
+		re := regexp.MustCompile(`^[\s]*#`) // any amount of whitespaces followed by # at the beginning of a line
+		if re.MatchString(currentLine) {
+			index := strings.Index(currentLine, "#")
+			v.SetCursor(index, y)
+			v.EditDelete(false)
+		} else {
+			v.SetCursor(0, y)
+			v.EditWrite('#')
+		}
+		v.SetCursor(x, y)
+	case key == c.KeySpace:
+		v.EditWrite(' ')
+	case key == c.KeyBackspace || key == c.KeyBackspace2:
+		v.EditDelete(true)
+		// ...
+	}
+}
+
+func OpenLaunchWindow(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
 	var err error
 	LaunchRunWindow, err = g.SetView(LAUNCH_RUN_VIEW, int(float64(maxX)*0.2), int(float64(maxY)*0.2), int(float64(maxX)*0.8), int(float64(maxY)*0.8))
 	if err != nil {
-		if err != gocui.ErrUnknownView {
+		if err != c.ErrUnknownView {
 			return err
 		}
 	}
 	LaunchRunWindow.Editable = true
+	LaunchRunWindow.Editor = DefaultEditor
 	LaunchRunWindow.Title = "Launch Run For"
 	LaunchRunWindow.Highlight = true
-	LaunchRunWindow.SelFgColor = gocui.ColorYellow
+	LaunchRunWindow.SelBgColor = c.ColorBlue
 
 	fmt.Fprintln(LaunchRunWindow, data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml)
 
@@ -298,7 +342,7 @@ func OpenLaunchWindow(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func ClosePopupView(g *gocui.Gui, v *gocui.View) error {
+func ClosePopupView(g *c.Gui, v *c.View) error {
 	if err := g.DeleteView(v.Name()); err != nil {
 		return err
 	}
@@ -306,77 +350,77 @@ func ClosePopupView(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func setKeybindings(g *gocui.Gui) error {
+func setKeybindings(g *c.Gui) error {
 	// Set keybindings to switch focus between windows
-	if err := g.SetKeybinding("", gocui.KeyArrowRight, gocui.ModNone, SwitchFocusRight); err != nil {
+	if err := g.SetKeybinding("", c.KeyArrowRight, c.ModNone, SwitchFocusRight); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("", gocui.KeyArrowLeft, gocui.ModNone, SwitchFocusLeft); err != nil {
+	if err := g.SetKeybinding("", c.KeyArrowLeft, c.ModNone, SwitchFocusLeft); err != nil {
 		return err
 	}
 
 	// Quit
-	if err := g.SetKeybinding("", 'q', gocui.ModNone, Quit); err != nil {
+	if err := g.SetKeybinding("", 'q', c.ModNone, Quit); err != nil {
 		return err
 	}
 	// Open Controls window
-	if err := g.SetKeybinding("", 'x', gocui.ModNone, OpenKeyMaps); err != nil {
+	if err := g.SetKeybinding("", 'x', c.ModNone, OpenKeyMaps); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("", 'O', gocui.ModNone, OpenInBrowser); err != nil {
+	if err := g.SetKeybinding("", 'O', c.ModNone, OpenInBrowser); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(KEY_MAPPINGS_VIEW, gocui.KeyCtrlX, gocui.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(KEY_MAPPINGS_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, gocui.KeyCtrlX, gocui.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, gocui.KeyEnter, gocui.ModNone, ValidateAndLaunchRun); err != nil {
+	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, c.KeyCtrlL, c.ModNone, ValidateAndLaunchRun); err != nil {
 		return err
 	}
 
 	// define keybindings for moving between items
-	if err := g.SetKeybinding(REPOSITORIES_VIEW, gocui.KeyArrowDown, gocui.ModNone, CursorDown); err != nil {
+	if err := g.SetKeybinding(REPOSITORIES_VIEW, c.KeyArrowDown, c.ModNone, CursorDown); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(REPOSITORIES_VIEW, gocui.KeyArrowUp, gocui.ModNone, CursorUp); err != nil {
+	if err := g.SetKeybinding(REPOSITORIES_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(REPOSITORIES_VIEW, gocui.KeyEnter, gocui.ModNone, LoadJobsForRepository); err != nil {
-		panic(err)
-	}
-
-	if err := g.SetKeybinding(JOBS_VIEW, gocui.KeyArrowDown, gocui.ModNone, CursorDown); err != nil {
-		panic(err)
-	}
-	if err := g.SetKeybinding(JOBS_VIEW, gocui.KeyArrowUp, gocui.ModNone, CursorUp); err != nil {
-		panic(err)
-	}
-	if err := g.SetKeybinding(JOBS_VIEW, gocui.KeyEnter, gocui.ModNone, LoadRunsForJob); err != nil {
-		panic(err)
-	}
-	if err := g.SetKeybinding(JOBS_VIEW, 'l', gocui.ModNone, OpenLaunchWindow); err != nil {
+	if err := g.SetKeybinding(REPOSITORIES_VIEW, c.KeyEnter, c.ModNone, LoadJobsForRepository); err != nil {
 		panic(err)
 	}
 
-	if err := g.SetKeybinding(RUNS_VIEW, gocui.KeyArrowDown, gocui.ModNone, CursorDown); err != nil {
+	if err := g.SetKeybinding(JOBS_VIEW, c.KeyArrowDown, c.ModNone, CursorDown); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(RUNS_VIEW, gocui.KeyArrowUp, gocui.ModNone, CursorUp); err != nil {
+	if err := g.SetKeybinding(JOBS_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(RUNS_VIEW, 'l', gocui.ModNone, OpenLaunchWindow); err != nil {
+	if err := g.SetKeybinding(JOBS_VIEW, c.KeyEnter, c.ModNone, LoadRunsForJob); err != nil {
 		panic(err)
 	}
-	// if err := g.SetKeybinding(RUNS_VIEW, 'i', gocui.ModNone, InspectCurrentRunConfig); err != nil {
+	if err := g.SetKeybinding(JOBS_VIEW, 'l', c.ModNone, OpenLaunchWindow); err != nil {
+		panic(err)
+	}
+
+	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowDown, c.ModNone, CursorDown); err != nil {
+		panic(err)
+	}
+	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
+		panic(err)
+	}
+	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenLaunchWindow); err != nil {
+		panic(err)
+	}
+	// if err := g.SetKeybinding(RUNS_VIEW, 'i', c.ModNone, InspectCurrentRunConfig); err != nil {
 	// panic(err)
 	// }
 
 	return nil
 }
 
-func LoadJobsForRepository(g *gocui.Gui, v *gocui.View) error {
+func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 	locationName := GetElementByCursor(v)
 	State.selectedRepo = locationName
@@ -395,7 +439,7 @@ func LoadJobsForRepository(g *gocui.Gui, v *gocui.View) error {
 
 }
 
-func LoadRunsForJob(g *gocui.Gui, v *gocui.View) error {
+func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
 	jobName := GetElementByCursor(v)
 	State.selectedJob = jobName
@@ -414,15 +458,16 @@ func LoadRunsForJob(g *gocui.Gui, v *gocui.View) error {
 	return SetFocus(g, RUNS_VIEW, v.Name())
 }
 
-func ValidateAndLaunchRun(g *gocui.Gui, v *gocui.View) error {
+func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
 	// runId := LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
+	LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
 
 	return nil
 }
 
-func SetWindowColors(g *gocui.Gui, viewName string, bgColor string) error {
+func SetWindowColors(g *c.Gui, viewName string, bgColor string) error {
 	view, err := g.View(viewName)
 	if err != nil {
 		return err
@@ -430,16 +475,16 @@ func SetWindowColors(g *gocui.Gui, viewName string, bgColor string) error {
 
 	if bgColor == "" {
 		view.Highlight = false
-		view.FgColor = gocui.Attribute(gocui.ColorDefault)
+		view.FgColor = c.Attribute(c.ColorDefault)
 	} else {
 		view.Highlight = true
-		// view.FgColor = gocui.Attribute(gocui.ColorGreen) | gocui.AttrBold
+		// view.FgColor = c.Attribute(c.ColorGreen) | c.AttrBold
 	}
 
 	return nil
 }
 
-func FillViewWithItems(v *gocui.View, items []string) {
+func FillViewWithItems(v *c.View, items []string) {
 	v.Clear()
 
 	for _, item := range items {
@@ -448,7 +493,7 @@ func FillViewWithItems(v *gocui.View, items []string) {
 
 }
 
-func GetContentByView(v *gocui.View) []string {
+func GetContentByView(v *c.View) []string {
 
 	name := v.Name()
 	switch name {
@@ -463,7 +508,7 @@ func GetContentByView(v *gocui.View) []string {
 
 }
 
-func GetElementByCursor(v *gocui.View) string {
+func GetElementByCursor(v *c.View) string {
 	_, oy := v.Origin()
 	_, vy := v.Cursor()
 
@@ -472,7 +517,7 @@ func GetElementByCursor(v *gocui.View) string {
 	return items[vy+oy]
 }
 
-func ResetCursor(g *gocui.Gui, name string) error {
+func ResetCursor(g *c.Gui, name string) error {
 	v, err := g.View(name)
 	if err != nil {
 		return err
