@@ -127,6 +127,9 @@ func main() {
 	InitializeViews(g)
 
 	SetWindowColors(g, REPOSITORIES_VIEW, "red")
+
+	data.AppendRepositories(LoadRepositories())
+	
 	currentRepositoriesList = data.GetRepositoryNames()
 	FillViewWithItems(RepositoriesView, currentRepositoriesList)
 
@@ -309,15 +312,7 @@ func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	State.previousActiveWindow = v.Name()
 	g.SetCurrentView(KEY_MAPPINGS_VIEW)
 
-	file, err := os.Open(fmt.Sprintf("/Users/katringrunert/Projects/Vandebron/dagster-tui/keymaps.txt"))
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer file.Close()
-
-	// read our opened jsonFile as a byte array.
-	byteValue, _ := ioutil.ReadAll(file)
-	fmt.Fprint(KeyMappingsView, string(byteValue))
+	fmt.Fprint(KeyMappingsView, s.KeyMap)
 	return nil
 }
 
@@ -469,7 +464,7 @@ func setKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(REPOSITORIES_VIEW, c.KeyEnter, c.ModNone, LoadJobsForRepository); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(REPOSITORIES_VIEW, 'f', c.ModNone, FilterRepositories); err != nil {
+	if err := g.SetKeybinding(REPOSITORIES_VIEW, 'f', c.ModNone, SwitchToFilterView); err != nil {
 		panic(err)
 	}
 
@@ -522,7 +517,7 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 	return nil
 }
 
-func FilterRepositories(g *c.Gui, v *c.View) error {
+func SwitchToFilterView(g *c.Gui, v *c.View) error {
 	State.previousActiveWindow = v.Name()
 	g.SetCurrentView(FILTER_VIEW)
 	FilterView.Title = fmt.Sprintf("Filter %s", v.Title)

@@ -16,7 +16,7 @@ var (
 	DagsterGraphQL string
 )
 
-func GetRepositories() []s.Repository {
+func LoadRepositories() []s.Repository {
 
 	query := "query RepositoriesQuery { repositoriesOrError { ... on RepositoryConnection { nodes { name location { name }}}}}"
 	var reqStr = []byte(fmt.Sprintf(`{ 
