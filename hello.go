@@ -21,6 +21,7 @@ var (
 	KeyMappingsView  *c.View
 	LaunchRunWindow  *c.View
 	FeedbackView     *c.View
+	FilterView       *c.View
 
 	data  *s.Overview
 	State *ApplicationState
@@ -40,6 +41,7 @@ const (
 	KEY_MAPPINGS_VIEW = "keymaps"
 	LAUNCH_RUN_VIEW   = "launch_run"
 	FEEDBACK_VIEW     = "feedback"
+	FILTER_VIEW       = "filter"
 )
 
 type ApplicationState struct {
@@ -47,6 +49,8 @@ type ApplicationState struct {
 	selectedRepo         string
 	selectedJob          string
 	selectedRun          string
+
+	repoFilter string
 }
 
 type ConfigState struct {
@@ -79,11 +83,13 @@ func main() {
 	data.Repositories = make(map[string]*s.RepositoryRepresentation, 0)
 	data.Url = ""
 
-	State = new(ApplicationState)
-	State.previousActiveWindow = ""
-	State.selectedRepo = ""
-	State.selectedJob = ""
-	State.selectedRun = ""
+	State = &ApplicationState{
+		previousActiveWindow: "",
+		selectedRepo:         "",
+		selectedJob:          "",
+		selectedRun:          "",
+		repoFilter:           "",
+	}
 
 	home, err := os.UserHomeDir()
 	userHomeDir = home
@@ -125,6 +131,11 @@ func main() {
 	SetViewStyles(RepositoriesView)
 	SetViewStyles(JobsView)
 	SetViewStyles(RunsView)
+	FilterView.Editable = true
+	FilterView.Editor = DefaultEditor
+	FilterView.Title = "Filter"
+
+	// OpenLaunchWindow(g, JobsView)
 
 	// Start main loop
 	err = g.MainLoop()
@@ -148,9 +159,11 @@ func InitializeViews(g *c.Gui) error {
 	window2X := windowWidth
 	window3X := windowWidth * 2
 
+	yOffset := 5
+
 	// Create windows
 	var err error
-	RepositoriesView, err = g.SetView(REPOSITORIES_VIEW, window1X, 1, window1X+windowWidth, windowHeight+1)
+	RepositoriesView, err = g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth, windowHeight+yOffset)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
@@ -158,7 +171,7 @@ func InitializeViews(g *c.Gui) error {
 	}
 	RepositoriesView.Title = "Repositories"
 
-	JobsView, err = g.SetView(JOBS_VIEW, window2X, 1, window2X+windowWidth, windowHeight+1)
+	JobsView, err = g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth, windowHeight+yOffset)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
@@ -166,13 +179,21 @@ func InitializeViews(g *c.Gui) error {
 	}
 	JobsView.Title = "Jobs"
 
-	RunsView, err = g.SetView(RUNS_VIEW, window3X, 1, window3X+windowWidth, windowHeight+1)
+	RunsView, err = g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, windowHeight+yOffset)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
 	RunsView.Title = "Runs"
+
+	FilterView, err = g.SetView(FILTER_VIEW, 0, 0, maxX, 1)
+	if err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	FilterView.Title = "Filter"
 
 	// Set focus on first window
 	if _, err := g.SetCurrentView(REPOSITORIES_VIEW); err != nil {
@@ -192,18 +213,25 @@ func layout(g *c.Gui) error {
 	window2X := windowWidth
 	window3X := windowWidth * 2
 
+	yOffset := 3
+
 	// Create windows
-	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, 1, window1X+windowWidth, windowHeight+1); err != nil {
+	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth, windowHeight+1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	if _, err := g.SetView(JOBS_VIEW, window2X, 1, window2X+windowWidth, windowHeight+1); err != nil {
+	if _, err := g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth, windowHeight+1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	if _, err := g.SetView(RUNS_VIEW, window3X, 1, window3X+windowWidth, windowHeight+1); err != nil {
+	if _, err := g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, windowHeight+1); err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	if _, err := g.SetView(FILTER_VIEW, 0, 0, maxX, yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
@@ -266,7 +294,7 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 	}
 }
 
-func OpenKeyMaps(g *c.Gui, v *c.View) error {
+func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
 	var err error
@@ -319,7 +347,7 @@ func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
 	}
 }
 
-func OpenLaunchWindow(g *c.Gui, v *c.View) error {
+func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
 	var err error
@@ -334,6 +362,46 @@ func OpenLaunchWindow(g *c.Gui, v *c.View) error {
 	LaunchRunWindow.Title = "Launch Run For"
 	LaunchRunWindow.Highlight = true
 	LaunchRunWindow.SelBgColor = c.ColorBlue
+
+	// x,y := LaunchRunWindow.Cursor()
+	// currentLine, _ := LaunchRunWindow.Line(y)
+
+	// 	sampleYaml := `execution:
+	//   config:
+	//     job_namespace: dagster
+	//     max_concurrent: 20
+	//     service_account_name: dagster
+	// ops:
+	//   op_get_e2e_input:
+	//     config:
+	//       test_selection:
+	//       - AllocationDataAddNewDeterministicAsset
+	//       # - AllocationDataCheckMaxCapacity
+	//       # - AllocationDataCheckPreviousDaysProductionActivity
+	//       # - AllocationDataCheckProductionDates
+	//       # - AllocationDataChecksumModelRegistry
+	//       # - AllocationDataComputeEstimatedModelType
+	//       # - AllocationDataMonitorAllocation
+	//       # - AllocationDataSyncAllocationCassandraEcedo
+	//       # - AllocationDataUpdateCorrectConnectionProperties
+	//       # - Evaluate
+	//       # - PredictBio
+	//       # - PredictDetSolar
+	//       # - PredictDetWind
+	//       # - PredictMlSolar
+	//       # - PredictMlWind
+	//       # - PredictSolarKNMI10MinActuals
+	//       # - PredictWindKNMI10MinActuals
+	// resources:
+	//   io_manager:
+	//     config:
+	//       s3_bucket: vdb-app-dagster-test-iomanager
+	//       s3_prefix: e2e
+	//   slack:
+	//     config:
+	//       token:
+	//         env: SLACK_BOT_TOKEN`
+	// fmt.Fprintln(LaunchRunWindow, sampleYaml)
 
 	fmt.Fprintln(LaunchRunWindow, data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml)
 
@@ -364,7 +432,7 @@ func setKeybindings(g *c.Gui) error {
 		return err
 	}
 	// Open Controls window
-	if err := g.SetKeybinding("", 'x', c.ModNone, OpenKeyMaps); err != nil {
+	if err := g.SetKeybinding("", 'x', c.ModNone, OpenPopupKeyMaps); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding("", 'O', c.ModNone, OpenInBrowser); err != nil {
@@ -390,6 +458,9 @@ func setKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(REPOSITORIES_VIEW, c.KeyEnter, c.ModNone, LoadJobsForRepository); err != nil {
 		panic(err)
 	}
+	if err := g.SetKeybinding(REPOSITORIES_VIEW, 'f', c.ModNone, FilterRepositories); err != nil {
+		panic(err)
+	}
 
 	if err := g.SetKeybinding(JOBS_VIEW, c.KeyArrowDown, c.ModNone, CursorDown); err != nil {
 		panic(err)
@@ -400,7 +471,7 @@ func setKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(JOBS_VIEW, c.KeyEnter, c.ModNone, LoadRunsForJob); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(JOBS_VIEW, 'l', c.ModNone, OpenLaunchWindow); err != nil {
+	if err := g.SetKeybinding(JOBS_VIEW, 'l', c.ModNone, OpenPopupLaunchWindow); err != nil {
 		panic(err)
 	}
 
@@ -410,13 +481,41 @@ func setKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenLaunchWindow); err != nil {
+	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenPopupLaunchWindow); err != nil {
 		panic(err)
 	}
 	// if err := g.SetKeybinding(RUNS_VIEW, 'i', c.ModNone, InspectCurrentRunConfig); err != nil {
 	// panic(err)
 	// }
+	if err := g.SetKeybinding(FILTER_VIEW, c.KeyEnter, c.ModNone, FilterItemsInView); err != nil {
+		panic(err)
+	}
 
+	return nil
+}
+
+func FilterItemsInView(g *c.Gui, v *c.View) error {
+	g.SetCurrentView(State.previousActiveWindow)
+	switch State.previousActiveWindow {
+	case REPOSITORIES_VIEW:
+		filterTerm := FilterView.BufferLines()[0]
+		os.WriteFile("/Users/katringrunert/Projects/Vandebron/dagster-tui/file.txt", []byte(filterTerm), 0666)
+		mytest := func(s string) bool { return strings.Contains(s, filterTerm) }
+		nnn := filter(data.GetRepositoryNames(), mytest)
+		
+		FillViewWithItems(RepositoriesView, nnn)
+	default:
+		return nil
+		
+	}
+
+	return nil
+}
+
+func FilterRepositories(g *c.Gui, v *c.View) error {
+	State.previousActiveWindow = v.Name()
+	g.SetCurrentView(FILTER_VIEW)
+	FilterView.Title = fmt.Sprintf("Filter %s", v.Title)
 	return nil
 }
 
@@ -460,7 +559,6 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
 func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
-	// runId := LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
 	LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
 

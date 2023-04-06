@@ -99,10 +99,8 @@ func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
 		nextViewName = RUNS_VIEW
 	case RUNS_VIEW:
 		nextViewName = REPOSITORIES_VIEW
-	case KEY_MAPPINGS_VIEW:
-		nextViewName = KEY_MAPPINGS_VIEW
-	case LAUNCH_RUN_VIEW:
-		nextViewName = LAUNCH_RUN_VIEW
+	default:
+		nextViewName = currentViewName
 	}
 
 	return SetFocus(g, nextViewName, currentViewName)
@@ -122,10 +120,8 @@ func SwitchFocusLeft(g *gocui.Gui, v *gocui.View) error {
 		previousViewName = REPOSITORIES_VIEW
 	case RUNS_VIEW:
 		previousViewName = JOBS_VIEW
-	case KEY_MAPPINGS_VIEW:
-		previousViewName = KEY_MAPPINGS_VIEW
-	case LAUNCH_RUN_VIEW:
-		previousViewName = LAUNCH_RUN_VIEW
+	default:
+		previousViewName = currentViewName
 	}
 
 	return SetFocus(g, previousViewName, currentViewName)
