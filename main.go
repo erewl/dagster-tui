@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	s "nl/vdb/dagstertui/datastructures"
@@ -25,6 +26,7 @@ var (
 
 	data  *s.Overview
 	State *ApplicationState
+	conf  Config
 
 	currentRepositoriesList []string
 	currentJobsList         []string
@@ -53,14 +55,14 @@ type ApplicationState struct {
 	repoFilter string
 }
 
-type ConfigState struct {
-	Repositories []string `json:"Repositories"`
+type Config struct {
+	Environments map[string]string `json:"environments"`
 }
 
-func LoadStateFromConfig(dir string) {
+func LoadConfig(dir string) {
 
 	// Open our jsonFile
-	jsonFile, err := os.Open(fmt.Sprintf("%s/.dagstertui/state.json", dir))
+	jsonFile, err := os.Open(fmt.Sprintf("%s/.dagstertui/config.json", dir))
 	// if we os.Open returns an error then handle it
 	if err != nil {
 		fmt.Println(err)
@@ -73,15 +75,24 @@ func LoadStateFromConfig(dir string) {
 
 	// we unmarshal our byteArray which contains our
 	// jsonFile's content into 'users' which we defined above
-	var state ConfigState
-	json.Unmarshal(byteValue, &state)
+	json.Unmarshal(byteValue, &conf)
 }
 
 func main() {
 
+	home, err := os.UserHomeDir()
+	userHomeDir = home
+	LoadConfig(home)
+
+	environmentFlag := flag.String("e", "test", "sets the home url of the dagster environment")
+
+	// Parse the command-line arguments to set the value of exampleFlag
+	flag.Parse()
+
 	data = new(s.Overview)
 	data.Repositories = make(map[string]*s.RepositoryRepresentation, 0)
-	data.Url = ""
+	data.Url = conf.Environments[*environmentFlag]
+	DagsterGraphQL = fmt.Sprintf("%s/graphql", data.Url)
 
 	State = &ApplicationState{
 		previousActiveWindow: "",
@@ -90,9 +101,6 @@ func main() {
 		selectedRun:          "",
 		repoFilter:           "",
 	}
-
-	home, err := os.UserHomeDir()
-	userHomeDir = home
 
 	// Initialize gocui
 	g, err := c.NewGui(c.Output256)
@@ -117,12 +125,6 @@ func main() {
 
 	// called once
 	InitializeViews(g)
-
-	// loading latest saved config
-	LoadStateFromConfig(userHomeDir)
-	if len(data.Repositories) == 0 {
-		data.AppendRepositories(GetRepositories())
-	}
 
 	SetWindowColors(g, REPOSITORIES_VIEW, "red")
 	currentRepositoriesList = data.GetRepositoryNames()
@@ -260,14 +262,13 @@ func openbrowser(url string) {
 
 func OpenInBrowser(g *c.Gui, v *c.View) error {
 
-	url := "https://dagster.test-backend.vdbinfra.nl"
 
 	switch v.Name() {
 	case REPOSITORIES_VIEW:
 		repo := State.selectedRepo
 		if repo != "" {
 			r := data.Repositories[repo]
-			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs", url, r.Name, r.Location))
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs", data.Url, r.Name, r.Location))
 		}
 		return nil
 	case JOBS_VIEW:
@@ -275,7 +276,7 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 		job := State.selectedJob
 		if repo != "" && job != "" {
 			r := data.Repositories[repo]
-			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s/playground", url, r.Name, r.Location, job))
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s/playground", data.Url, r.Name, r.Location, job))
 		}
 		return nil
 	case RUNS_VIEW:
@@ -284,7 +285,7 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 			runId = GetElementByCursor(RunsView)
 		}
 		if runId != "" {
-			openbrowser(fmt.Sprintf("%s/runs/%s", url, runId))
+			openbrowser(fmt.Sprintf("%s/runs/%s", data.Url, runId))
 		}
 		return nil
 	default:
@@ -511,11 +512,11 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 		filterTerm := FilterView.BufferLines()[0]
 		cond_contains_term := func(s string) bool { return strings.Contains(s, filterTerm) }
 		currentRepositoriesList = filter(data.GetRepositoryNames(), cond_contains_term)
-		
+
 		FillViewWithItems(RepositoriesView, currentRepositoriesList)
 	default:
 		return nil
-		
+
 	}
 
 	return nil

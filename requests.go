@@ -12,8 +12,8 @@ import (
 	"strings"
 )
 
-const (
-	URL = "https://dagster.test-backend.vdbinfra.nl/graphql"
+var (
+	DagsterGraphQL string
 )
 
 func GetRepositories() []s.Repository {
@@ -22,7 +22,7 @@ func GetRepositories() []s.Repository {
 	var reqStr = []byte(fmt.Sprintf(`{ 
 		"query": "%s"
 		}`, query))
-	req, reqErr := http.NewRequest("POST", URL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -73,7 +73,7 @@ func GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
 	}`, query, repository.Name, repository.Location)
 
 	var reqStr = []byte(str)
-	req, reqErr := http.NewRequest("POST", URL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -138,7 +138,7 @@ func GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limi
 	var reqStr = []byte(fmt.Sprintf(`{ 
 		"query": "%s"
 		}`, query))
-	req, reqErr := http.NewRequest("POST", URL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -209,7 +209,7 @@ func LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runC
 	}`, query, repository.Name, repository.Location, jobName, strings.Join(runConfigYamlLines, "\\n"))
 
 	var reqStr = []byte(str)
-	req, reqErr := http.NewRequest("POST", URL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
