@@ -499,11 +499,10 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 	switch State.previousActiveWindow {
 	case REPOSITORIES_VIEW:
 		filterTerm := FilterView.BufferLines()[0]
-		os.WriteFile("/Users/katringrunert/Projects/Vandebron/dagster-tui/file.txt", []byte(filterTerm), 0666)
-		mytest := func(s string) bool { return strings.Contains(s, filterTerm) }
-		nnn := filter(data.GetRepositoryNames(), mytest)
+		cond_contains_term := func(s string) bool { return strings.Contains(s, filterTerm) }
+		currentRepositoriesList = filter(data.GetRepositoryNames(), cond_contains_term)
 		
-		FillViewWithItems(RepositoriesView, nnn)
+		FillViewWithItems(RepositoriesView, currentRepositoriesList)
 	default:
 		return nil
 		
