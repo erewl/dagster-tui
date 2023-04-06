@@ -264,7 +264,6 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 
 	switch v.Name() {
 	case REPOSITORIES_VIEW:
-		// https://dagster.test-backend.vdbinfra.nl/locations/supply_forecasting_repo@supply-forecasting-pr-2168/jobs
 		repo := State.selectedRepo
 		if repo != "" {
 			r := data.Repositories[repo]
@@ -272,7 +271,6 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 		}
 		return nil
 	case JOBS_VIEW:
-		// https://dagster.test-backend.vdbinfra.nl/locations/supply_forecasting_repo@supply-forecasting-pr-2168/jobs/e2e
 		repo := State.selectedRepo
 		job := State.selectedJob
 		if repo != "" && job != "" {
@@ -298,15 +296,27 @@ func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
 	var err error
-	KeyMappingsView, err = g.SetView(KEY_MAPPINGS_VIEW, int(float64(maxX)*0.2), int(float64(maxY)*0.2), int(float64(maxX)*0.8), int(float64(maxY)*0.8))
+	KeyMappingsView, err = g.SetView(KEY_MAPPINGS_VIEW, int(float64(maxX)*0.2), 1, int(float64(maxX)*0.8), maxY+1)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
+	KeyMappingsView.Clear()
 	KeyMappingsView.Title = "KeyMaps"
 
+	State.previousActiveWindow = v.Name()
 	g.SetCurrentView(KEY_MAPPINGS_VIEW)
+
+	file, err := os.Open(fmt.Sprintf("/Users/katringrunert/Projects/Vandebron/dagster-tui/keymaps.txt"))
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer file.Close()
+
+	// read our opened jsonFile as a byte array.
+	byteValue, _ := ioutil.ReadAll(file)
+	fmt.Fprint(KeyMappingsView, string(byteValue))
 	return nil
 }
 
