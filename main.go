@@ -333,14 +333,13 @@ func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
 			v.SetCursor(0, y)
 			v.EditWrite('#')
 		}
-		v.SetCursor(x, y)
-	case ch != 0 && mod == 0:
-		v.EditWrite(ch)
+		v.SetCursor(x, y+1)
 	case key == c.KeySpace:
 		v.EditWrite(' ')
 	case key == c.KeyBackspace || key == c.KeyBackspace2:
 		v.EditDelete(true)
-		// ...
+	case ch != 0 && mod == 0:
+		v.EditWrite(ch)
 	}
 }
 
