@@ -31,9 +31,9 @@ Enter       Apply Filter to the list of items of the view from where the filter 
 
 LaunchConfigEditor - View
 --
-Enter       (Verifies TBD) and Launches a Run of the Job with the displayed config
-???         Closes the Launch Window, Changes are not saved
-???         Toggle comment in selected line
+ctrl + l	(Verifies TBD) and Launches a Run of the Job with the displayed config
+ctrl + x	Closes the Launch Window, Changes are not saved
+ctrl + /    Toggle comment in selected line
 Arrow Keys  Navigation (TBD)
 
 `

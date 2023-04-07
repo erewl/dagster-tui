@@ -312,19 +312,16 @@ var DefaultEditor c.Editor = c.EditorFunc(simpleEditor)
 
 func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
 	switch {
-	case ch != 0 && mod == 0:
-		v.EditWrite(ch)
 	case key == c.KeyArrowDown:
-		v.MoveCursor(0, 1, true)
+		v.MoveCursor(0, 1, false)
 	case key == c.KeyArrowUp:
-		v.MoveCursor(0, -1, true)
+		v.MoveCursor(0, -1, false)
 	case key == c.KeyArrowLeft:
-		v.MoveCursor(-1, 0, true)
+		v.MoveCursor(-1, 0, false)
 	case key == c.KeyArrowRight:
-		v.MoveCursor(1, 0, true)
-	case key == '/' && mod == 1:
+		v.MoveCursor(1, 0, false)
+	case key == c.KeyCtrlSlash:
 		x, y := v.Cursor()
-		fmt.Print(x, y)
 		currentLine, _ := v.Line(y)
 
 		re := regexp.MustCompile(`^[\s]*#`) // any amount of whitespaces followed by # at the beginning of a line
@@ -337,6 +334,8 @@ func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
 			v.EditWrite('#')
 		}
 		v.SetCursor(x, y)
+	case ch != 0 && mod == 0:
+		v.EditWrite(ch)
 	case key == c.KeySpace:
 		v.EditWrite(' ')
 	case key == c.KeyBackspace || key == c.KeyBackspace2:
@@ -360,6 +359,7 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	LaunchRunWindow.Title = "Launch Run For"
 	LaunchRunWindow.Highlight = true
 	LaunchRunWindow.SelBgColor = c.ColorBlue
+	LaunchRunWindow.SetCursor(0,0)
 
 	// x,y := LaunchRunWindow.Cursor()
 	// currentLine, _ := LaunchRunWindow.Line(y)
