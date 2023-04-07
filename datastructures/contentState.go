@@ -2,6 +2,7 @@ package datastructures
 
 import (
 	"sort"
+	"strings"
 )
 
 type RunRepresentation struct {
@@ -100,10 +101,18 @@ func (o *Overview) GetSortedRunNamesFor(location string, pipelineName string) []
 	return runNames
 }
 
+func (o *Overview) FindRunIdBySubstring(location string, pipelineName string, info string) RunRepresentation {
+	for _, run := range o.Repositories[location].Jobs[pipelineName].Runs {
+		if strings.Contains(info, run.RunId) {
+			return *run
+		}
+	}
+	panic("Couldnt find any run")
+}
 
 func (o *Overview) GetRunsFor(location string, pipelineName string) []RunRepresentation {
 	runs := make([]RunRepresentation, 0)
-	for _, run := range(o.Repositories[location].Jobs[pipelineName].Runs) {
+	for _, run := range o.Repositories[location].Jobs[pipelineName].Runs {
 		runs = append(runs, *run)
 	}
 	return runs

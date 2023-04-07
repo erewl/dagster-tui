@@ -209,7 +209,7 @@ func layout(g *c.Gui) error {
 	windowWidth := maxX / 2
 	windowHeight := maxY - 2
 	window1X := 0
-	window2X := windowWidth/2
+	window2X := windowWidth / 2
 	window3X := windowWidth
 
 	yOffset := 3
@@ -258,7 +258,6 @@ func openbrowser(url string) {
 }
 
 func OpenInBrowser(g *c.Gui, v *c.View) error {
-
 	switch v.Name() {
 	case REPOSITORIES_VIEW:
 		repo := State.selectedRepo
@@ -278,7 +277,7 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 	case RUNS_VIEW:
 		runId := State.selectedRun
 		if runId == "" {
-			runId = GetElementByCursor(RunsView)
+			runId = data.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, GetElementByCursor(v)).RunId
 		}
 		if runId != "" {
 			openbrowser(fmt.Sprintf("%s/runs/%s", data.Url, runId))
@@ -403,15 +402,9 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	// fmt.Fprintln(LaunchRunWindow, sampleYaml)
 
 	runConfig := ""
-	if(v.Name() == RUNS_VIEW) {
+	if v.Name() == RUNS_VIEW {
 		selectedRun := GetElementByCursor(v)
-
-		for _, run := range(data.Repositories[State.selectedRepo].Jobs[State.selectedJob].Runs) {
-			if (strings.Contains(selectedRun, run.RunId)) {
-				runConfig = run.RunconfigYaml
-				break
-			}
-		}
+		runConfig = data.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun).RunconfigYaml
 	} else {
 		runConfig = data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml
 	}
@@ -561,7 +554,7 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	runs := data.GetRunsFor(State.selectedRepo, State.selectedJob)
 	runInfos = make([]string, 0)
 	// runInfos = append(runInfos, "Status \t RunId \t Time")
-	for _, run := range(runs) {
+	for _, run := range runs {
 		runInfos = append(runInfos, fmt.Sprintf("%s \t %s \t %f", run.Status, run.RunId, run.StartTime))
 	}
 
