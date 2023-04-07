@@ -129,7 +129,7 @@ func main() {
 	SetWindowColors(g, REPOSITORIES_VIEW, "red")
 
 	data.AppendRepositories(LoadRepositories())
-	
+
 	currentRepositoriesList = data.GetRepositoryNames()
 	FillViewWithItems(RepositoriesView, currentRepositoriesList)
 
@@ -156,19 +156,9 @@ func SetViewStyles(v *c.View) {
 }
 
 func InitializeViews(g *c.Gui) error {
-	// Set window sizes and positions
-	maxX, maxY := g.Size()
-	windowWidth := maxX / 3
-	windowHeight := maxY - 2
-	window1X := 0
-	window2X := windowWidth
-	window3X := windowWidth * 2
-
-	yOffset := 5
-
 	// Create windows
 	var err error
-	RepositoriesView, err = g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth, windowHeight+yOffset)
+	RepositoriesView, err = g.SetView(REPOSITORIES_VIEW, 0, 0, 1, 1)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
@@ -176,7 +166,7 @@ func InitializeViews(g *c.Gui) error {
 	}
 	RepositoriesView.Title = "Repositories"
 
-	JobsView, err = g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth, windowHeight+yOffset)
+	JobsView, err = g.SetView(JOBS_VIEW, 0, 0, 1, 1)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
@@ -184,7 +174,7 @@ func InitializeViews(g *c.Gui) error {
 	}
 	JobsView.Title = "Jobs"
 
-	RunsView, err = g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, windowHeight+yOffset)
+	RunsView, err = g.SetView(RUNS_VIEW, 0, 0, 1, 1)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
@@ -192,7 +182,7 @@ func InitializeViews(g *c.Gui) error {
 	}
 	RunsView.Title = "Runs"
 
-	FilterView, err = g.SetView(FILTER_VIEW, 0, 0, maxX, 1)
+	FilterView, err = g.SetView(FILTER_VIEW, 0, 0, 1, 1)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
@@ -264,7 +254,6 @@ func openbrowser(url string) {
 }
 
 func OpenInBrowser(g *c.Gui, v *c.View) error {
-
 
 	switch v.Name() {
 	case REPOSITORIES_VIEW:
