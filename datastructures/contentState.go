@@ -100,6 +100,15 @@ func (o *Overview) GetSortedRunNamesFor(location string, pipelineName string) []
 	return runNames
 }
 
+
+func (o *Overview) GetRunsFor(location string, pipelineName string) []RunRepresentation {
+	runs := make([]RunRepresentation, 0)
+	for _, run := range(o.Repositories[location].Jobs[pipelineName].Runs) {
+		runs = append(runs, *run)
+	}
+	return runs
+}
+
 func (o *Overview) GetRepoByLocation(location string) RepositoryRepresentation {
 	return *o.Repositories[location]
 }

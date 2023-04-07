@@ -31,7 +31,7 @@ var (
 	currentRepositoriesList []string
 	currentJobsList         []string
 
-	runNames []string
+	runInfos []string
 
 	userHomeDir string
 )
@@ -84,14 +84,18 @@ func main() {
 	userHomeDir = home
 	LoadConfig(home)
 
-	environmentFlag := flag.String("e", "test", "sets the home url of the dagster environment")
+	environmentFlag := flag.String("e", "default", "sets the home url of the dagster environment")
 
 	// Parse the command-line arguments to set the value of exampleFlag
 	flag.Parse()
 
-	data = new(s.Overview)
-	data.Repositories = make(map[string]*s.RepositoryRepresentation, 0)
-	data.Url = conf.Environments[*environmentFlag]
+	data = &s.Overview{
+		Repositories: make(map[string]*s.RepositoryRepresentation, 0),
+		Url:          conf.Environments[*environmentFlag],
+	}
+	if *environmentFlag == "default" {
+		data.Url = conf.Environments[conf.Environments[*environmentFlag]]
+	}
 	DagsterGraphQL = fmt.Sprintf("%s/graphql", data.Url)
 
 	State = &ApplicationState{
@@ -202,21 +206,21 @@ func InitializeViews(g *c.Gui) error {
 func layout(g *c.Gui) error {
 	// Set window sizes and positions
 	maxX, maxY := g.Size()
-	windowWidth := maxX / 3
+	windowWidth := maxX / 2
 	windowHeight := maxY - 2
 	window1X := 0
-	window2X := windowWidth
-	window3X := windowWidth * 2
+	window2X := windowWidth/2
+	window3X := windowWidth
 
 	yOffset := 3
 
 	// Create windows
-	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth, windowHeight+1); err != nil {
+	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth/2, windowHeight+1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	if _, err := g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth, windowHeight+1); err != nil {
+	if _, err := g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth/2, windowHeight+1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
@@ -226,7 +230,7 @@ func layout(g *c.Gui) error {
 			return err
 		}
 	}
-	if _, err := g.SetView(FILTER_VIEW, 0, 0, maxX, yOffset-1); err != nil {
+	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
@@ -398,7 +402,20 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	//         env: SLACK_BOT_TOKEN`
 	// fmt.Fprintln(LaunchRunWindow, sampleYaml)
 
-	fmt.Fprintln(LaunchRunWindow, data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml)
+	runConfig := ""
+	if(v.Name() == RUNS_VIEW) {
+		selectedRun := GetElementByCursor(v)
+
+		for _, run := range(data.Repositories[State.selectedRepo].Jobs[State.selectedJob].Runs) {
+			if (strings.Contains(selectedRun, run.RunId)) {
+				runConfig = run.RunconfigYaml
+				break
+			}
+		}
+	} else {
+		runConfig = data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml
+	}
+	fmt.Fprintln(LaunchRunWindow, runConfig)
 
 	State.previousActiveWindow = v.Name()
 	g.SetCurrentView(LAUNCH_RUN_VIEW)
@@ -541,11 +558,16 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
 	pipelineRuns := GetPipelineRuns(repo, State.selectedJob, 10)
 	data.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
-	runNames = data.GetSortedRunNamesFor(State.selectedRepo, State.selectedJob)
+	runs := data.GetRunsFor(State.selectedRepo, State.selectedJob)
+	runInfos = make([]string, 0)
+	// runInfos = append(runInfos, "Status \t RunId \t Time")
+	for _, run := range(runs) {
+		runInfos = append(runInfos, fmt.Sprintf("%s \t %s \t %f", run.Status, run.RunId, run.StartTime))
+	}
 
 	RunsView.Title = fmt.Sprintf("%s - Runs", State.selectedJob)
 	RunsView.Clear()
-	FillViewWithItems(RunsView, runNames)
+	FillViewWithItems(RunsView, runInfos)
 
 	ResetCursor(g, RUNS_VIEW)
 	return SetFocus(g, RUNS_VIEW, v.Name())
@@ -578,7 +600,6 @@ func SetWindowColors(g *c.Gui, viewName string, bgColor string) error {
 
 func FillViewWithItems(v *c.View, items []string) {
 	v.Clear()
-
 	for _, item := range items {
 		fmt.Fprintln(v, item)
 	}
@@ -586,7 +607,6 @@ func FillViewWithItems(v *c.View, items []string) {
 }
 
 func GetContentByView(v *c.View) []string {
-
 	name := v.Name()
 	switch name {
 	case REPOSITORIES_VIEW:
@@ -594,7 +614,7 @@ func GetContentByView(v *c.View) []string {
 	case JOBS_VIEW:
 		return currentJobsList
 	case RUNS_VIEW:
-		return runNames
+		return runInfos
 	}
 	return []string{}
 
