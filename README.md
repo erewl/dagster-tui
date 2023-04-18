@@ -1,6 +1,6 @@
 # DagsterTUI - Terminal UI for Dagster
 
-The GraphQL wrapper for your dagster environments. Work with dagster from the comfort of your terminal
+The GraphQL wrapper TUI for your dagster environments. Work with dagster from the comfort of your terminal
 
 ## Installation
 
