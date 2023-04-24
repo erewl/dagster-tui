@@ -11,22 +11,25 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	c "github.com/jroimartin/gocui"
 )
 
 var (
-	RepositoriesView *c.View
-	JobsView         *c.View
-	RunsView         *c.View
-	KeyMappingsView  *c.View
-	LaunchRunWindow  *c.View
-	FeedbackView     *c.View
-	FilterView       *c.View
+	RepositoriesView    *c.View
+	JobsView            *c.View
+	RunsView            *c.View
+	RunInfoView         *c.View
+	KeyMappingsView     *c.View
+	LaunchRunWindow     *c.View
+	FeedbackView        *c.View
+	FilterView          *c.View
+	EnvironmentInfoView *c.View
 
-	data  *s.Overview
-	State *ApplicationState
-	conf  Config
+	overview *s.Overview
+	State    *ApplicationState
+	conf     Config
 
 	currentRepositoriesList []string
 	currentJobsList         []string
@@ -37,13 +40,16 @@ var (
 )
 
 const (
+	// Views
 	REPOSITORIES_VIEW = "repositories"
 	JOBS_VIEW         = "jobs"
 	RUNS_VIEW         = "runs"
+	RUN_INFO_VIEW     = "run_info"
 	KEY_MAPPINGS_VIEW = "keymaps"
 	LAUNCH_RUN_VIEW   = "launch_run"
 	FEEDBACK_VIEW     = "feedback"
 	FILTER_VIEW       = "filter"
+	ENVIRONMENT_INFO  = "environment"
 )
 
 type ApplicationState struct {
@@ -86,17 +92,17 @@ func main() {
 
 	environmentFlag := flag.String("e", "default", "sets the home url of the dagster environment")
 
-	// Parse the command-line arguments to set the value of exampleFlag
+	// Parse the command-line arguments to set the value of environmentFlag
 	flag.Parse()
 
-	data = &s.Overview{
+	overview = &s.Overview{
 		Repositories: make(map[string]*s.RepositoryRepresentation, 0),
 		Url:          conf.Environments[*environmentFlag],
 	}
 	if *environmentFlag == "default" {
-		data.Url = conf.Environments[conf.Environments[*environmentFlag]]
+		overview.Url = conf.Environments[conf.Environments[*environmentFlag]]
 	}
-	DagsterGraphQL = fmt.Sprintf("%s/graphql", data.Url)
+	DagsterGraphQL = fmt.Sprintf("%s/graphql", overview.Url)
 
 	State = &ApplicationState{
 		previousActiveWindow: "",
@@ -132,19 +138,19 @@ func main() {
 
 	SetWindowColors(g, REPOSITORIES_VIEW, "red")
 
-	data.AppendRepositories(LoadRepositories())
+	overview.AppendRepositories(LoadRepositories())
 
-	currentRepositoriesList = data.GetRepositoryNames()
+	currentRepositoriesList = overview.GetRepositoryNames()
 	FillViewWithItems(RepositoriesView, currentRepositoriesList)
+
+	environmentInfo := []string{strings.TrimPrefix(overview.Url, "https://")}
+	FillViewWithItems(EnvironmentInfoView, environmentInfo)
 
 	SetViewStyles(RepositoriesView)
 	SetViewStyles(JobsView)
 	SetViewStyles(RunsView)
 	FilterView.Editable = true
 	FilterView.Editor = DefaultEditor
-	FilterView.Title = "Filter"
-
-	// OpenLaunchWindow(g, JobsView)
 
 	// Start main loop
 	err = g.MainLoop()
@@ -159,42 +165,30 @@ func SetViewStyles(v *c.View) {
 	v.Wrap = true
 }
 
+func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle string) error {
+	view, err := g.SetView(viewName, 0, 0, 1, 1)
+	if err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	view.Title = viewTitle
+
+	*viewRep = view
+	return nil
+}
+
 func InitializeViews(g *c.Gui) error {
-	// Create windows
-	var err error
-	RepositoriesView, err = g.SetView(REPOSITORIES_VIEW, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	RepositoriesView.Title = "Repositories"
+	// Create windows, position is irrelevant
+	// TODO proper error handling here
+	initializeView(g, &RepositoriesView, REPOSITORIES_VIEW, "Repositories")
+	initializeView(g, &JobsView, JOBS_VIEW, "Jobs")
+	initializeView(g, &RunsView, RUNS_VIEW, "Runs")
+	initializeView(g, &RunInfoView, RUN_INFO_VIEW, "Run Info")
+	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
+	initializeView(g, &EnvironmentInfoView, ENVIRONMENT_INFO, "Info")
 
-	JobsView, err = g.SetView(JOBS_VIEW, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	JobsView.Title = "Jobs"
-
-	RunsView, err = g.SetView(RUNS_VIEW, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	RunsView.Title = "Runs"
-
-	FilterView, err = g.SetView(FILTER_VIEW, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	FilterView.Title = "Filter"
-
-	// Set focus on first window
+	// Set focus on main window
 	if _, err := g.SetCurrentView(REPOSITORIES_VIEW); err != nil {
 		panic(err)
 	}
@@ -215,22 +209,39 @@ func layout(g *c.Gui) error {
 	yOffset := 3
 
 	// Create windows
+	// most left
 	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth/2, windowHeight+1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
+	// on top of REPOSITORIES_VIEW
+	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	// left of REPOSITORIES_VIEW
 	if _, err := g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth/2, windowHeight+1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	if _, err := g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, windowHeight+1); err != nil {
+	// most right
+	if _, err := g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0))); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
+	// underneath RUNS_VIEW
+	if _, err := g.SetView(RUN_INFO_VIEW, window3X, int(2.0*(windowHeight/3.0))+1, window3X+windowWidth, windowHeight+1); err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	// TODO ok for now, but could be more content-agnostic
+	// top right corner
+	if _, err := g.SetView(ENVIRONMENT_INFO, window3X+windowWidth-len(overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
@@ -262,25 +273,25 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 	case REPOSITORIES_VIEW:
 		repo := State.selectedRepo
 		if repo != "" {
-			r := data.Repositories[repo]
-			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs", data.Url, r.Name, r.Location))
+			r := overview.Repositories[repo]
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs", overview.Url, r.Name, r.Location))
 		}
 		return nil
 	case JOBS_VIEW:
 		repo := State.selectedRepo
 		job := State.selectedJob
 		if repo != "" && job != "" {
-			r := data.Repositories[repo]
-			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s/playground", data.Url, r.Name, r.Location, job))
+			r := overview.Repositories[repo]
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s/playground", overview.Url, r.Name, r.Location, job))
 		}
 		return nil
 	case RUNS_VIEW:
 		runId := State.selectedRun
 		if runId == "" {
-			runId = data.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, GetElementByCursor(v)).RunId
+			runId = overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, GetElementByCursor(v)).RunId
 		}
 		if runId != "" {
-			openbrowser(fmt.Sprintf("%s/runs/%s", data.Url, runId))
+			openbrowser(fmt.Sprintf("%s/runs/%s", overview.Url, runId))
 		}
 		return nil
 	default:
@@ -358,7 +369,7 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	LaunchRunWindow.Title = "Launch Run For"
 	LaunchRunWindow.Highlight = true
 	LaunchRunWindow.SelBgColor = c.ColorBlue
-	LaunchRunWindow.SetCursor(0,0)
+	LaunchRunWindow.SetCursor(0, 0)
 
 	// x,y := LaunchRunWindow.Cursor()
 	// currentLine, _ := LaunchRunWindow.Line(y)
@@ -403,9 +414,9 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	runConfig := ""
 	if v.Name() == RUNS_VIEW {
 		selectedRun := GetElementByCursor(v)
-		runConfig = data.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun).RunconfigYaml
+		runConfig = overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun).RunconfigYaml
 	} else {
-		runConfig = data.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml
+		runConfig = overview.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml
 	}
 	fmt.Fprintln(LaunchRunWindow, runConfig)
 
@@ -479,10 +490,10 @@ func setKeybindings(g *c.Gui) error {
 		panic(err)
 	}
 
-	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowDown, c.ModNone, CursorDown); err != nil {
+	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowDown, c.ModNone, CursorDownAndUpdateRunInfo); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
+	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowUp, c.ModNone, CursorUpAndUpdateRunInfo); err != nil {
 		panic(err)
 	}
 	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenPopupLaunchWindow); err != nil {
@@ -498,13 +509,45 @@ func setKeybindings(g *c.Gui) error {
 	return nil
 }
 
+func setRunInformation(v *c.View) {
+	RunInfoView.Clear()
+	if v.Name() == RUNS_VIEW && len(v.ViewBufferLines()) > 0{
+		selectedRun := GetElementByCursor(v)
+		run := overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun)
+		runInfo := make([]string, 0)
+
+		s := time.Unix(int64(run.StartTime), 0)
+		e := time.Unix(int64(run.EndTime), 0)
+		duration := e.Sub(s)
+		// 2006-1-2 15:4:5
+		runInfo = append(runInfo, fmt.Sprintf("Start\t\t %s", s.Local().Format(("2006-01-02 15:04:05"))))
+		runInfo = append(runInfo, fmt.Sprintf("End\t\t %s", e.Local().Format("2006-01-02 15:04:05")))
+		runInfo = append(runInfo, fmt.Sprintf("Duration\t\t %s", duration.String()))
+		runInfo = append(runInfo, fmt.Sprintf("Status\t\t %s", run.Status))
+		
+		FillViewWithItems(RunInfoView, runInfo)
+	}
+}
+
+func CursorUpAndUpdateRunInfo(g *c.Gui, v *c.View) error {
+	err := CursorUp(g, v)
+	setRunInformation(v)
+	return err
+}
+
+func CursorDownAndUpdateRunInfo(g *c.Gui, v *c.View) error {
+	err := CursorDown(g, v)
+	setRunInformation(v)
+	return err
+}
+
 func FilterItemsInView(g *c.Gui, v *c.View) error {
 	g.SetCurrentView(State.previousActiveWindow)
 	switch State.previousActiveWindow {
 	case REPOSITORIES_VIEW:
 		filterTerm := FilterView.BufferLines()[0]
 		cond_contains_term := func(s string) bool { return strings.Contains(s, filterTerm) }
-		currentRepositoriesList = filter(data.GetRepositoryNames(), cond_contains_term)
+		currentRepositoriesList = filter(overview.GetRepositoryNames(), cond_contains_term)
 
 		FillViewWithItems(RepositoriesView, currentRepositoriesList)
 	default:
@@ -527,13 +570,13 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 	locationName := GetElementByCursor(v)
 	State.selectedRepo = locationName
 
-	repo := data.GetRepoByLocation(locationName)
+	repo := overview.GetRepoByLocation(locationName)
 
-	data.AppendJobsToRepository(repo.Location, GetJobsInRepository(repo))
+	overview.AppendJobsToRepository(repo.Location, GetJobsInRepository(repo))
 
 	JobsView.Title = fmt.Sprintf("%s - Jobs", locationName)
 	JobsView.Clear()
-	currentJobsList = data.GetJobNamesInRepository(locationName)
+	currentJobsList = overview.GetJobNamesInRepository(locationName)
 	FillViewWithItems(JobsView, currentJobsList)
 
 	ResetCursor(g, JOBS_VIEW)
@@ -546,15 +589,16 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	jobName := GetElementByCursor(v)
 	State.selectedJob = jobName
 
-	repo := data.GetRepoByLocation(State.selectedRepo)
+	repo := overview.GetRepoByLocation(State.selectedRepo)
 
 	pipelineRuns := GetPipelineRuns(repo, State.selectedJob, 10)
-	data.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
-	runs := data.GetRunsFor(State.selectedRepo, State.selectedJob)
+	overview.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
+	runs := overview.GetRunsFor(State.selectedRepo, State.selectedJob)
 	runInfos = make([]string, 0)
+	// TODO make headers skippable in navigation
 	// runInfos = append(runInfos, "Status \t RunId \t Time")
 	for _, run := range runs {
-		runInfos = append(runInfos, fmt.Sprintf("%s \t %s \t %f", run.Status, run.RunId, run.StartTime))
+		runInfos = append(runInfos, fmt.Sprintf("%s \t %s", run.Status, run.RunId))
 	}
 
 	RunsView.Title = fmt.Sprintf("%s - Runs", State.selectedJob)
@@ -562,13 +606,17 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	FillViewWithItems(RunsView, runInfos)
 
 	ResetCursor(g, RUNS_VIEW)
+	RunsView.SetCursor(0,0)
+	
+	setRunInformation(RunsView)
 	return SetFocus(g, RUNS_VIEW, v.Name())
 }
 
 func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
-	LaunchRunForJob(*data.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
+	LaunchRunForJob(*overview.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
+	LoadRunsForJob(g, JobsView)
 
 	return nil
 }
