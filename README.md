@@ -24,7 +24,7 @@ In your root directory create a `~/.dagstertui` folder and in there you can crea
 And then you can start the dagster-tui by specifying which environment you want to target: `/path/to/dagstertui -e test`
 
 ## Local Development
-Currently using Go Version `1.16.7 darwin/amd64`
+Currently using Go Version `1.19.1 darwin/amd64`
 
 Build with:
 
