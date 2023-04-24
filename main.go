@@ -565,6 +565,7 @@ func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
 	LaunchRunForJob(*overview.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
+	LoadRunsForJob(g, JobsView)
 
 	return nil
 }
