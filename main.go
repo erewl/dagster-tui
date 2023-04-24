@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	c "github.com/jroimartin/gocui"
 )
@@ -19,6 +20,7 @@ var (
 	RepositoriesView    *c.View
 	JobsView            *c.View
 	RunsView            *c.View
+	RunInfoView         *c.View
 	KeyMappingsView     *c.View
 	LaunchRunWindow     *c.View
 	FeedbackView        *c.View
@@ -42,6 +44,7 @@ const (
 	REPOSITORIES_VIEW = "repositories"
 	JOBS_VIEW         = "jobs"
 	RUNS_VIEW         = "runs"
+	RUN_INFO_VIEW     = "run_info"
 	KEY_MAPPINGS_VIEW = "keymaps"
 	LAUNCH_RUN_VIEW   = "launch_run"
 	FEEDBACK_VIEW     = "feedback"
@@ -140,7 +143,7 @@ func main() {
 	currentRepositoriesList = overview.GetRepositoryNames()
 	FillViewWithItems(RepositoriesView, currentRepositoriesList)
 
-	environmentInfo := []string{overview.Url}
+	environmentInfo := []string{strings.TrimPrefix(overview.Url, "https://")}
 	FillViewWithItems(EnvironmentInfoView, environmentInfo)
 
 	SetViewStyles(RepositoriesView)
@@ -181,6 +184,7 @@ func InitializeViews(g *c.Gui) error {
 	initializeView(g, &RepositoriesView, REPOSITORIES_VIEW, "Repositories")
 	initializeView(g, &JobsView, JOBS_VIEW, "Jobs")
 	initializeView(g, &RunsView, RUNS_VIEW, "Runs")
+	initializeView(g, &RunInfoView, RUN_INFO_VIEW, "Run Info")
 	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
 	initializeView(g, &EnvironmentInfoView, ENVIRONMENT_INFO, "Info")
 
@@ -205,28 +209,39 @@ func layout(g *c.Gui) error {
 	yOffset := 3
 
 	// Create windows
+	// most left
 	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth/2, windowHeight+1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	if _, err := g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth/2, windowHeight+1); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	if _, err := g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, windowHeight+1); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
+	// on top of REPOSITORIES_VIEW
 	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
+	// left of REPOSITORIES_VIEW
+	if _, err := g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth/2, windowHeight+1); err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	// most right
+	if _, err := g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0))); err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	// underneath RUNS_VIEW
+	if _, err := g.SetView(RUN_INFO_VIEW, window3X, int(2.0*(windowHeight/3.0))+1, window3X+windowWidth, windowHeight+1); err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
 	// TODO ok for now, but could be more content-agnostic
-	if _, err := g.SetView(ENVIRONMENT_INFO, window3X+windowWidth-len(overview.Url)-2, 0, int(float64(window3X+windowWidth)), yOffset-1); err != nil {
+	// top right corner
+	if _, err := g.SetView(ENVIRONMENT_INFO, window3X+windowWidth-len(overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
@@ -475,10 +490,10 @@ func setKeybindings(g *c.Gui) error {
 		panic(err)
 	}
 
-	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowDown, c.ModNone, CursorDown); err != nil {
+	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowDown, c.ModNone, CursorDownAndUpdateRunInfo); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
+	if err := g.SetKeybinding(RUNS_VIEW, c.KeyArrowUp, c.ModNone, CursorUpAndUpdateRunInfo); err != nil {
 		panic(err)
 	}
 	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenPopupLaunchWindow); err != nil {
@@ -492,6 +507,38 @@ func setKeybindings(g *c.Gui) error {
 	}
 
 	return nil
+}
+
+func setRunInformation(v *c.View) {
+	RunInfoView.Clear()
+	if v.Name() == RUNS_VIEW && len(v.ViewBufferLines()) > 0{
+		selectedRun := GetElementByCursor(v)
+		run := overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun)
+		runInfo := make([]string, 0)
+
+		s := time.Unix(int64(run.StartTime), 0)
+		e := time.Unix(int64(run.EndTime), 0)
+		duration := e.Sub(s)
+		// 2006-1-2 15:4:5
+		runInfo = append(runInfo, fmt.Sprintf("Start\t\t %s", s.Local().Format(("2006-01-02 15:04:05"))))
+		runInfo = append(runInfo, fmt.Sprintf("End\t\t %s", e.Local().Format("2006-01-02 15:04:05")))
+		runInfo = append(runInfo, fmt.Sprintf("Duration\t\t %s", duration.String()))
+		runInfo = append(runInfo, fmt.Sprintf("Status\t\t %s", run.Status))
+		
+		FillViewWithItems(RunInfoView, runInfo)
+	}
+}
+
+func CursorUpAndUpdateRunInfo(g *c.Gui, v *c.View) error {
+	err := CursorUp(g, v)
+	setRunInformation(v)
+	return err
+}
+
+func CursorDownAndUpdateRunInfo(g *c.Gui, v *c.View) error {
+	err := CursorDown(g, v)
+	setRunInformation(v)
+	return err
 }
 
 func FilterItemsInView(g *c.Gui, v *c.View) error {
@@ -548,9 +595,10 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	overview.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
 	runs := overview.GetRunsFor(State.selectedRepo, State.selectedJob)
 	runInfos = make([]string, 0)
+	// TODO make headers skippable in navigation
 	// runInfos = append(runInfos, "Status \t RunId \t Time")
 	for _, run := range runs {
-		runInfos = append(runInfos, fmt.Sprintf("%s \t %s \t %f", run.Status, run.RunId, run.StartTime))
+		runInfos = append(runInfos, fmt.Sprintf("%s \t %s", run.Status, run.RunId))
 	}
 
 	RunsView.Title = fmt.Sprintf("%s - Runs", State.selectedJob)
@@ -558,6 +606,9 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	FillViewWithItems(RunsView, runInfos)
 
 	ResetCursor(g, RUNS_VIEW)
+	RunsView.SetCursor(0,0)
+	
+	setRunInformation(RunsView)
 	return SetFocus(g, RUNS_VIEW, v.Name())
 }
 
