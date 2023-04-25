@@ -499,6 +499,9 @@ func setKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenPopupLaunchWindow); err != nil {
 		panic(err)
 	}
+	if err := g.SetKeybinding(RUNS_VIEW, 'T', c.ModNone, TerminateRunByRunId); err != nil {
+		panic(err)
+	}
 	// if err := g.SetKeybinding(RUNS_VIEW, 'i', c.ModNone, InspectCurrentRunConfig); err != nil {
 	// panic(err)
 	// }
@@ -508,6 +511,16 @@ func setKeybindings(g *c.Gui) error {
 
 	return nil
 }
+
+func TerminateRunByRunId(g *c.Gui, v *c.View) error {
+	selectedRun := GetElementByCursor(v)
+	run := overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun)
+	TerminateRun(run.RunId)
+	
+	LoadRunsForJob(g, JobsView)
+	return nil
+}
+
 
 func setRunInformation(v *c.View) {
 	RunInfoView.Clear()

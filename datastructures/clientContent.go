@@ -25,6 +25,16 @@ type LaunchRunResponse struct {
 	} `json:"data"`
 }
 
+type TerminateRunResponse struct {
+	Data struct {
+		TerminateRun struct {
+			Run struct {
+				RunId string `json:"runId"`
+			} `json:"run"`
+		} `json:"terminateRun"`
+	} `json:"data"`
+}
+
 type Jobs struct {
 	name string
 }

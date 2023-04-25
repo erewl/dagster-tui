@@ -234,3 +234,60 @@ func LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runC
 
 	return response.Data.LaunchRun.Run.RunId
 }
+
+func TerminateRun(runId string) {
+	re := regexp.MustCompile(`[\s]`)
+	query := `mutation TerminateRun($runId: String!) {
+				terminateRun(runId: $runId){
+					__typename
+					... on TerminateRunSuccess{
+					run {
+						runId
+					}
+					}
+					... on TerminateRunFailure {
+					message
+					}
+					... on RunNotFoundError {
+					runId
+					}
+					... on PythonError {
+					message
+					stack
+					}
+				}
+			}`
+	
+	query = re.ReplaceAllString(query, " ")
+	formattedQuery := fmt.Sprintf(`{
+		"query": "%s",
+		"variables": { "runId": "%s"}
+	}`, query, runId)
+
+	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer([]byte(formattedQuery)))
+	if reqErr != nil {
+		panic(reqErr)
+	}
+	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
+
+	client := &http.Client{}
+	resp, respErr := client.Do(req)
+	if respErr != nil {
+		log.Fatalf("Failed POST request: %v", respErr)
+	}
+	defer resp.Body.Close()
+
+	jsonData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Failed to read response body: %v", err)
+	}
+
+	var response s.TerminateRunResponse
+	if err := json.Unmarshal([]byte(jsonData), &response); err != nil {
+		log.Fatalf("Failed to parse JSON: %v, %s", err, string(jsonData))
+	}
+
+	if err != nil {
+		log.Fatalf("Failed to read response body: %v", err)
+	}
+}
