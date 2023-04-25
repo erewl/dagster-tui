@@ -12,17 +12,18 @@ import (
 	"strings"
 )
 
-var (
-	DagsterGraphQL string
-)
 
-func LoadRepositories() []s.Repository {
+type GraphQLClient struct {
+	url string
+}
+
+func(c *GraphQLClient) LoadRepositories() []s.Repository {
 
 	query := "query RepositoriesQuery { repositoriesOrError { ... on RepositoryConnection { nodes { name location { name }}}}}"
 	var reqStr = []byte(fmt.Sprintf(`{ 
 		"query": "%s"
 		}`, query))
-	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -49,7 +50,7 @@ func LoadRepositories() []s.Repository {
 	return repos
 }
 
-func GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
+func(c *GraphQLClient) GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
 	re := regexp.MustCompile(`[\s]`)
 	query := `query JobsQuery($repositoryLocationName: String!, $repositoryName: String!) {
 	repositoryOrError(
@@ -73,7 +74,7 @@ func GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
 	}`, query, repository.Name, repository.Location)
 
 	var reqStr = []byte(str)
-	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -102,7 +103,7 @@ func GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
 	return jobs
 }
 
-func GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limit int) s.PipelineOrError {
+func(c *GraphQLClient) GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limit int) s.PipelineOrError {
 	query := fmt.Sprintf(`query RunIdsQuery {
 	pipelineOrError(
 		params: {
@@ -138,7 +139,7 @@ func GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limi
 	var reqStr = []byte(fmt.Sprintf(`{ 
 		"query": "%s"
 		}`, query))
-	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -166,7 +167,7 @@ func GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limi
 	return pipelineOrError
 }
 
-func LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runConfigYamlLines []string) string {
+func(c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runConfigYamlLines []string) string {
 	query := `mutation LaunchRunMutation(
 		$repositoryLocationName: String!
 		$repositoryName: String!
@@ -209,7 +210,7 @@ func LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runC
 	}`, query, repository.Name, repository.Location, jobName, strings.Join(runConfigYamlLines, "\\n"))
 
 	var reqStr = []byte(str)
-	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -235,7 +236,7 @@ func LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runC
 	return response.Data.LaunchRun.Run.RunId
 }
 
-func TerminateRun(runId string) {
+func(c *GraphQLClient) TerminateRun(runId string) {
 	re := regexp.MustCompile(`[\s]`)
 	query := `mutation TerminateRun($runId: String!) {
 				terminateRun(runId: $runId){
@@ -264,7 +265,7 @@ func TerminateRun(runId string) {
 		"variables": { "runId": "%s"}
 	}`, query, runId)
 
-	req, reqErr := http.NewRequest("POST", DagsterGraphQL, bytes.NewBuffer([]byte(formattedQuery)))
+	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer([]byte(formattedQuery)))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -283,6 +284,7 @@ func TerminateRun(runId string) {
 	}
 
 	var response s.TerminateRunResponse
+
 	if err := json.Unmarshal([]byte(jsonData), &response); err != nil {
 		log.Fatalf("Failed to parse JSON: %v, %s", err, string(jsonData))
 	}

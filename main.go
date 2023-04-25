@@ -16,6 +16,7 @@ import (
 	c "github.com/jroimartin/gocui"
 )
 
+
 var (
 	RepositoriesView    *c.View
 	JobsView            *c.View
@@ -37,6 +38,8 @@ var (
 	runInfos []string
 
 	userHomeDir string
+
+	client *GraphQLClient
 )
 
 const (
@@ -102,7 +105,10 @@ func main() {
 	if *environmentFlag == "default" {
 		overview.Url = conf.Environments[conf.Environments[*environmentFlag]]
 	}
-	DagsterGraphQL = fmt.Sprintf("%s/graphql", overview.Url)
+
+	client = &GraphQLClient{
+		url: fmt.Sprintf("%s/graphql", overview.Url),
+	}
 
 	State = &ApplicationState{
 		previousActiveWindow: "",
@@ -138,7 +144,7 @@ func main() {
 
 	SetWindowColors(g, REPOSITORIES_VIEW, "red")
 
-	overview.AppendRepositories(LoadRepositories())
+	overview.AppendRepositories(client.LoadRepositories())
 
 	currentRepositoriesList = overview.GetRepositoryNames()
 	FillViewWithItems(RepositoriesView, currentRepositoriesList)
@@ -515,7 +521,7 @@ func setKeybindings(g *c.Gui) error {
 func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 	selectedRun := GetElementByCursor(v)
 	run := overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun)
-	TerminateRun(run.RunId)
+	client.TerminateRun(run.RunId)
 	
 	LoadRunsForJob(g, JobsView)
 	return nil
@@ -524,7 +530,7 @@ func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 
 func setRunInformation(v *c.View) {
 	RunInfoView.Clear()
-	if v.Name() == RUNS_VIEW && len(v.ViewBufferLines()) > 0{
+	if v.Name() == RUNS_VIEW && len(v.ViewBufferLines()) > 0 {
 		selectedRun := GetElementByCursor(v)
 		run := overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun)
 		runInfo := make([]string, 0)
@@ -585,7 +591,7 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 	repo := overview.GetRepoByLocation(locationName)
 
-	overview.AppendJobsToRepository(repo.Location, GetJobsInRepository(repo))
+	overview.AppendJobsToRepository(repo.Location, client.GetJobsInRepository(repo))
 
 	JobsView.Title = fmt.Sprintf("%s - Jobs", locationName)
 	JobsView.Clear()
@@ -604,7 +610,7 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
 	repo := overview.GetRepoByLocation(State.selectedRepo)
 
-	pipelineRuns := GetPipelineRuns(repo, State.selectedJob, 10)
+	pipelineRuns := client.GetPipelineRuns(repo, State.selectedJob, 10)
 	overview.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
 	runs := overview.GetRunsFor(State.selectedRepo, State.selectedJob)
 	runInfos = make([]string, 0)
@@ -627,7 +633,7 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
 func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
-	LaunchRunForJob(*overview.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
+	client.LaunchRunForJob(*overview.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
 	LoadRunsForJob(g, JobsView)
 
