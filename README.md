@@ -29,7 +29,7 @@ Currently using Go Version `1.19.1 darwin/amd64`
 Build with:
 
 ```
-go install
+go install cmd/dagstertui.go
 ```
 
 and running application with:
