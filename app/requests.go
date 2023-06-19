@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -7,23 +7,22 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	s "nl/vdb/dagstertui/datastructures"
+	s "nl/vdb/dagstertui/internal"
 	"regexp"
 	"strings"
 )
 
-
 type GraphQLClient struct {
-	url string
+	Url string
 }
 
-func(c *GraphQLClient) LoadRepositories() []s.Repository {
+func (c *GraphQLClient) LoadRepositories() []s.Repository {
 
 	query := "query RepositoriesQuery { repositoriesOrError { ... on RepositoryConnection { nodes { name location { name }}}}}"
 	var reqStr = []byte(fmt.Sprintf(`{ 
 		"query": "%s"
 		}`, query))
-	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.Url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -50,7 +49,7 @@ func(c *GraphQLClient) LoadRepositories() []s.Repository {
 	return repos
 }
 
-func(c *GraphQLClient) GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
+func (c *GraphQLClient) GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
 	re := regexp.MustCompile(`[\s]`)
 	query := `query JobsQuery($repositoryLocationName: String!, $repositoryName: String!) {
 	repositoryOrError(
@@ -74,7 +73,7 @@ func(c *GraphQLClient) GetJobsInRepository(repository s.RepositoryRepresentation
 	}`, query, repository.Name, repository.Location)
 
 	var reqStr = []byte(str)
-	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.Url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -103,7 +102,7 @@ func(c *GraphQLClient) GetJobsInRepository(repository s.RepositoryRepresentation
 	return jobs
 }
 
-func(c *GraphQLClient) GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limit int) s.PipelineOrError {
+func (c *GraphQLClient) GetPipelineRuns(repository s.RepositoryRepresentation, jobName string, limit int) s.PipelineOrError {
 	query := fmt.Sprintf(`query RunIdsQuery {
 	pipelineOrError(
 		params: {
@@ -139,7 +138,7 @@ func(c *GraphQLClient) GetPipelineRuns(repository s.RepositoryRepresentation, jo
 	var reqStr = []byte(fmt.Sprintf(`{ 
 		"query": "%s"
 		}`, query))
-	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.Url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -167,7 +166,7 @@ func(c *GraphQLClient) GetPipelineRuns(repository s.RepositoryRepresentation, jo
 	return pipelineOrError
 }
 
-func(c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runConfigYamlLines []string) string {
+func (c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, jobName string, runConfigYamlLines []string) string {
 	query := `mutation LaunchRunMutation(
 		$repositoryLocationName: String!
 		$repositoryName: String!
@@ -210,7 +209,7 @@ func(c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, jo
 	}`, query, repository.Name, repository.Location, jobName, strings.Join(runConfigYamlLines, "\\n"))
 
 	var reqStr = []byte(str)
-	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer(reqStr))
+	req, reqErr := http.NewRequest("POST", c.Url, bytes.NewBuffer(reqStr))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -236,7 +235,7 @@ func(c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, jo
 	return response.Data.LaunchRun.Run.RunId
 }
 
-func(c *GraphQLClient) TerminateRun(runId string) {
+func (c *GraphQLClient) TerminateRun(runId string) {
 	re := regexp.MustCompile(`[\s]`)
 	query := `mutation TerminateRun($runId: String!) {
 				terminateRun(runId: $runId){
@@ -258,14 +257,14 @@ func(c *GraphQLClient) TerminateRun(runId string) {
 					}
 				}
 			}`
-	
+
 	query = re.ReplaceAllString(query, " ")
 	formattedQuery := fmt.Sprintf(`{
 		"query": "%s",
 		"variables": { "runId": "%s"}
 	}`, query, runId)
 
-	req, reqErr := http.NewRequest("POST", c.url, bytes.NewBuffer([]byte(formattedQuery)))
+	req, reqErr := http.NewRequest("POST", c.Url, bytes.NewBuffer([]byte(formattedQuery)))
 	if reqErr != nil {
 		panic(reqErr)
 	}
@@ -292,4 +291,30 @@ func(c *GraphQLClient) TerminateRun(runId string) {
 	if err != nil {
 		log.Fatalf("Failed to read response body: %v", err)
 	}
+}
+
+func (c *GraphQLClient) GetLogs(runId string) {
+	// example on how to fetch logs
+	// 	query LogsForRun {
+	//   logsForRun(
+	//     runId: "4c322239-fac1-45e1-bcdb-a0e5a4c27a08"
+	//   ) {
+	//     ...on EventConnection {
+	//       events {
+	//         ...on LogsCapturedEvent {
+	//           logKey
+	//           fileKey
+	//           message
+	//         }
+	//         # ...on LogMessageEvent{
+	//         #   level
+	//         #   timestamp
+	//         #   message
+	//         # }
+	//       }
+	//       cursor
+	//       hasMore
+	//     }
+	//   }
+	// }
 }

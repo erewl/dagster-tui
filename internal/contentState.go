@@ -1,4 +1,4 @@
-package datastructures
+package internal
 
 import (
 	"sort"
@@ -76,11 +76,11 @@ func (o *Overview) AppendJobsToRepository(location string, Jobs []Job) {
 }
 
 func (o *Overview) UpdatePipelineAndRuns(location string, pipeline PipelineOrError) {
-	selectedJob := o.Repositories[location].Jobs[pipeline.Name]
+	SelectedJob := o.Repositories[location].Jobs[pipeline.Name]
 	if len(pipeline.Presets) > 0 {
-		selectedJob.DefaultRunConfigYaml = pipeline.Presets[0].RunConfigYaml
+		SelectedJob.DefaultRunConfigYaml = pipeline.Presets[0].RunConfigYaml
 	}
-	selectedJob.Runs = make([]*RunRepresentation, 0)
+	SelectedJob.Runs = make([]*RunRepresentation, 0)
 	for _, run := range pipeline.Runs {
 		runRep := new(RunRepresentation)
 		runRep.RunId = run.RunId
@@ -89,7 +89,7 @@ func (o *Overview) UpdatePipelineAndRuns(location string, pipeline PipelineOrErr
 		runRep.RunconfigYaml = run.RunConfigYaml
 		runRep.Status = run.Status
 
-		selectedJob.Runs = append(selectedJob.Runs, runRep)
+		SelectedJob.Runs = append(SelectedJob.Runs, runRep)
 	}
 }
 

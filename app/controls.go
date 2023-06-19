@@ -1,14 +1,34 @@
-package main
+package app
 
 import (
-	"github.com/jroimartin/gocui"
+	c "github.com/jroimartin/gocui"
 )
 
-func Quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.ErrQuit
+func Quit(g *c.Gui, v *c.View) error {
+	return c.ErrQuit
 }
 
-func CursorDown(g *gocui.Gui, v *gocui.View) error {
+func GetElementByCursor(v *c.View) string {
+	_, oy := v.Origin()
+	_, vy := v.Cursor()
+
+	items := GetContentByView(v)
+
+	return items[vy+oy]
+}
+
+func ResetCursor(g *c.Gui, name string) error {
+	v, err := g.View(name)
+	if err != nil {
+		return err
+	}
+	v.SetCursor(0, 0)
+	v.SetOrigin(0, 0)
+
+	return nil
+}
+
+func CursorDown(g *c.Gui, v *c.View) error {
 	items := GetContentByView(v)
 	cx, cy := v.Cursor()
 	_, h := v.Size()
@@ -37,7 +57,7 @@ func CursorDown(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func CursorUp(g *gocui.Gui, v *gocui.View) error {
+func CursorUp(g *c.Gui, v *c.View) error {
 	items := GetContentByView(v)
 	cx, cy := v.Cursor()
 	_, h := v.Size()
@@ -67,7 +87,7 @@ func CursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func SetFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
+func SetFocus(g *c.Gui, newViewName string, oldViewName string) error {
 	// Set focus on next view
 	_, err := g.SetCurrentView(newViewName)
 	if err != nil {
@@ -85,10 +105,10 @@ func SetFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
 	return nil
 }
 
-func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
+func SwitchFocusRight(g *c.Gui, v *c.View) error {
 	// Get current view name
 	currentViewName := v.Name()
-	State.previousActiveWindow = currentViewName
+	State.PreviousActiveWindow = currentViewName
 
 	// Get next view name
 	nextViewName := ""
@@ -106,10 +126,10 @@ func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
 	return SetFocus(g, nextViewName, currentViewName)
 }
 
-func SwitchFocusLeft(g *gocui.Gui, v *gocui.View) error {
+func SwitchFocusLeft(g *c.Gui, v *c.View) error {
 	// Get current view name
 	currentViewName := v.Name()
-	State.previousActiveWindow = currentViewName
+	State.PreviousActiveWindow = currentViewName
 
 	// Get previous view name
 	previousViewName := ""

@@ -1,11 +1,10 @@
-package main
+package app
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
-	s "nl/vdb/dagstertui/datastructures"
+	s "nl/vdb/dagstertui/internal"
 	"os"
 	"os/exec"
 	"regexp"
@@ -16,6 +15,34 @@ import (
 	c "github.com/jroimartin/gocui"
 )
 
+type TransformFunc func(any) []string
+
+type Window[T any] struct {
+	View              *c.View
+	StartX, StartY    int
+	EndX, EndY        int
+	Title             string
+	Elements          []string
+	RawElements       []T
+	TransformRawToStr TransformFunc
+}
+
+func (w *Window[T]) SetView(g *c.Gui) error {
+	if _, err := g.SetView(REPOSITORIES_VIEW, w.StartX, w.StartY, w.EndX, w.EndY); err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	return nil
+}
+
+// Replacing FillViewWithItems
+func (w *Window[T]) RenderItems() {
+	w.View.Clear()
+	for _, item := range w.Elements {
+		fmt.Fprintln(w.View, item)
+	}
+}
 
 var (
 	RepositoriesView    *c.View
@@ -28,18 +55,20 @@ var (
 	FilterView          *c.View
 	EnvironmentInfoView *c.View
 
-	overview *s.Overview
-	State    *ApplicationState
-	conf     Config
+	RepoWindow *Window[s.Repository]
 
-	currentRepositoriesList []string
-	currentJobsList         []string
+	Overview *s.Overview
+	State    *ApplicationState
+	Conf     Config
+
+	CurrentRepositoriesList []string
+	CurrentJobsList         []string
 
 	runInfos []string
 
 	userHomeDir string
 
-	client *GraphQLClient
+	Client *GraphQLClient
 )
 
 const (
@@ -56,12 +85,12 @@ const (
 )
 
 type ApplicationState struct {
-	previousActiveWindow string
-	selectedRepo         string
-	selectedJob          string
-	selectedRun          string
+	PreviousActiveWindow string
+	SelectedRepo         string
+	SelectedJob          string
+	SelectedRun          string
 
-	repoFilter string
+	RepoFilter string
 }
 
 type Config struct {
@@ -84,85 +113,7 @@ func LoadConfig(dir string) {
 
 	// we unmarshal our byteArray which contains our
 	// jsonFile's content into 'users' which we defined above
-	json.Unmarshal(byteValue, &conf)
-}
-
-func main() {
-
-	home, err := os.UserHomeDir()
-	userHomeDir = home
-	LoadConfig(home)
-
-	environmentFlag := flag.String("e", "default", "sets the home url of the dagster environment")
-
-	// Parse the command-line arguments to set the value of environmentFlag
-	flag.Parse()
-
-	overview = &s.Overview{
-		Repositories: make(map[string]*s.RepositoryRepresentation, 0),
-		Url:          conf.Environments[*environmentFlag],
-	}
-	if *environmentFlag == "default" {
-		overview.Url = conf.Environments[conf.Environments[*environmentFlag]]
-	}
-
-	client = &GraphQLClient{
-		url: fmt.Sprintf("%s/graphql", overview.Url),
-	}
-
-	State = &ApplicationState{
-		previousActiveWindow: "",
-		selectedRepo:         "",
-		selectedJob:          "",
-		selectedRun:          "",
-		repoFilter:           "",
-	}
-
-	// Initialize gocui
-	g, err := c.NewGui(c.Output256)
-	if err != nil {
-		panic(err)
-	}
-
-	defer g.Close()
-
-	// Set layout function
-	g.SetManagerFunc(layout)
-
-	// Set keybindings
-	err = setKeybindings(g)
-	if err != nil {
-		panic(err)
-	}
-
-	g.SelFgColor = c.ColorGreen | c.AttrBold
-	g.BgColor = c.ColorDefault
-	g.Highlight = true
-
-	// called once
-	InitializeViews(g)
-
-	SetWindowColors(g, REPOSITORIES_VIEW, "red")
-
-	overview.AppendRepositories(client.LoadRepositories())
-
-	currentRepositoriesList = overview.GetRepositoryNames()
-	FillViewWithItems(RepositoriesView, currentRepositoriesList)
-
-	environmentInfo := []string{strings.TrimPrefix(overview.Url, "https://")}
-	FillViewWithItems(EnvironmentInfoView, environmentInfo)
-
-	SetViewStyles(RepositoriesView)
-	SetViewStyles(JobsView)
-	SetViewStyles(RunsView)
-	FilterView.Editable = true
-	FilterView.Editor = DefaultEditor
-
-	// Start main loop
-	err = g.MainLoop()
-	if err != nil && err != c.ErrQuit {
-		panic(err)
-	}
+	json.Unmarshal(byteValue, &Conf)
 }
 
 func SetViewStyles(v *c.View) {
@@ -187,6 +138,17 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 func InitializeViews(g *c.Gui) error {
 	// Create windows, position is irrelevant
 	// TODO proper error handling here
+	view, err := g.SetView(REPOSITORIES_VIEW, 0, 0, 1, 1)
+	if err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	RepoWindow = &Window[s.Repository]{
+		Title: "Repositories",
+		View:  view,
+	}
+
 	initializeView(g, &RepositoriesView, REPOSITORIES_VIEW, "Repositories")
 	initializeView(g, &JobsView, JOBS_VIEW, "Jobs")
 	initializeView(g, &RunsView, RUNS_VIEW, "Runs")
@@ -203,7 +165,7 @@ func InitializeViews(g *c.Gui) error {
 }
 
 // repeated call with every change (render)
-func layout(g *c.Gui) error {
+func Layout(g *c.Gui) error {
 	// Set window sizes and positions
 	maxX, maxY := g.Size()
 	windowWidth := maxX / 2
@@ -247,7 +209,7 @@ func layout(g *c.Gui) error {
 	}
 	// TODO ok for now, but could be more content-agnostic
 	// top right corner
-	if _, err := g.SetView(ENVIRONMENT_INFO, window3X+windowWidth-len(overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1); err != nil {
+	if _, err := g.SetView(ENVIRONMENT_INFO, window3X+windowWidth-len(Overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
@@ -277,27 +239,27 @@ func openbrowser(url string) {
 func OpenInBrowser(g *c.Gui, v *c.View) error {
 	switch v.Name() {
 	case REPOSITORIES_VIEW:
-		repo := State.selectedRepo
+		repo := State.SelectedRepo
 		if repo != "" {
-			r := overview.Repositories[repo]
-			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs", overview.Url, r.Name, r.Location))
+			r := Overview.Repositories[repo]
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs", Overview.Url, r.Name, r.Location))
 		}
 		return nil
 	case JOBS_VIEW:
-		repo := State.selectedRepo
-		job := State.selectedJob
+		repo := State.SelectedRepo
+		job := State.SelectedJob
 		if repo != "" && job != "" {
-			r := overview.Repositories[repo]
-			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s/playground", overview.Url, r.Name, r.Location, job))
+			r := Overview.Repositories[repo]
+			openbrowser(fmt.Sprintf("%s/locations/%s@%s/jobs/%s/playground", Overview.Url, r.Name, r.Location, job))
 		}
 		return nil
 	case RUNS_VIEW:
-		runId := State.selectedRun
+		runId := State.SelectedRun
 		if runId == "" {
-			runId = overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, GetElementByCursor(v)).RunId
+			runId = Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, GetElementByCursor(v)).RunId
 		}
 		if runId != "" {
-			openbrowser(fmt.Sprintf("%s/runs/%s", overview.Url, runId))
+			openbrowser(fmt.Sprintf("%s/runs/%s", Overview.Url, runId))
 		}
 		return nil
 	default:
@@ -318,7 +280,7 @@ func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	KeyMappingsView.Clear()
 	KeyMappingsView.Title = "KeyMaps"
 
-	State.previousActiveWindow = v.Name()
+	State.PreviousActiveWindow = v.Name()
 	g.SetCurrentView(KEY_MAPPINGS_VIEW)
 
 	fmt.Fprint(KeyMappingsView, s.KeyMap)
@@ -419,14 +381,14 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 
 	runConfig := ""
 	if v.Name() == RUNS_VIEW {
-		selectedRun := GetElementByCursor(v)
-		runConfig = overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun).RunconfigYaml
+		SelectedRun := GetElementByCursor(v)
+		runConfig = Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun).RunconfigYaml
 	} else {
-		runConfig = overview.Repositories[State.selectedRepo].Jobs[State.selectedJob].DefaultRunConfigYaml
+		runConfig = Overview.Repositories[State.SelectedRepo].Jobs[State.SelectedJob].DefaultRunConfigYaml
 	}
 	fmt.Fprintln(LaunchRunWindow, runConfig)
 
-	State.previousActiveWindow = v.Name()
+	State.PreviousActiveWindow = v.Name()
 	g.SetCurrentView(LAUNCH_RUN_VIEW)
 	return nil
 }
@@ -435,11 +397,11 @@ func ClosePopupView(g *c.Gui, v *c.View) error {
 	if err := g.DeleteView(v.Name()); err != nil {
 		return err
 	}
-	g.SetCurrentView(State.previousActiveWindow)
+	g.SetCurrentView(State.PreviousActiveWindow)
 	return nil
 }
 
-func setKeybindings(g *c.Gui) error {
+func SetKeybindings(g *c.Gui) error {
 	// Set keybindings to switch focus between windows
 	if err := g.SetKeybinding("", c.KeyArrowRight, c.ModNone, SwitchFocusRight); err != nil {
 		return err
@@ -519,20 +481,19 @@ func setKeybindings(g *c.Gui) error {
 }
 
 func TerminateRunByRunId(g *c.Gui, v *c.View) error {
-	selectedRun := GetElementByCursor(v)
-	run := overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun)
-	client.TerminateRun(run.RunId)
-	
+	SelectedRun := GetElementByCursor(v)
+	run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
+	Client.TerminateRun(run.RunId)
+
 	LoadRunsForJob(g, JobsView)
 	return nil
 }
 
-
 func setRunInformation(v *c.View) {
 	RunInfoView.Clear()
 	if v.Name() == RUNS_VIEW && len(v.ViewBufferLines()) > 0 {
-		selectedRun := GetElementByCursor(v)
-		run := overview.FindRunIdBySubstring(State.selectedRepo, State.selectedJob, selectedRun)
+		SelectedRun := GetElementByCursor(v)
+		run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
 		runInfo := make([]string, 0)
 
 		s := time.Unix(int64(run.StartTime), 0)
@@ -543,7 +504,7 @@ func setRunInformation(v *c.View) {
 		runInfo = append(runInfo, fmt.Sprintf("End\t\t %s", e.Local().Format("2006-01-02 15:04:05")))
 		runInfo = append(runInfo, fmt.Sprintf("Duration\t\t %s", duration.String()))
 		runInfo = append(runInfo, fmt.Sprintf("Status\t\t %s", run.Status))
-		
+
 		FillViewWithItems(RunInfoView, runInfo)
 	}
 }
@@ -561,14 +522,14 @@ func CursorDownAndUpdateRunInfo(g *c.Gui, v *c.View) error {
 }
 
 func FilterItemsInView(g *c.Gui, v *c.View) error {
-	g.SetCurrentView(State.previousActiveWindow)
-	switch State.previousActiveWindow {
+	g.SetCurrentView(State.PreviousActiveWindow)
+	switch State.PreviousActiveWindow {
 	case REPOSITORIES_VIEW:
 		filterTerm := FilterView.BufferLines()[0]
 		cond_contains_term := func(s string) bool { return strings.Contains(s, filterTerm) }
-		currentRepositoriesList = filter(overview.GetRepositoryNames(), cond_contains_term)
+		CurrentRepositoriesList = filter(Overview.GetRepositoryNames(), cond_contains_term)
 
-		FillViewWithItems(RepositoriesView, currentRepositoriesList)
+		FillViewWithItems(RepositoriesView, CurrentRepositoriesList)
 	default:
 		return nil
 
@@ -578,7 +539,7 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 }
 
 func SwitchToFilterView(g *c.Gui, v *c.View) error {
-	State.previousActiveWindow = v.Name()
+	State.PreviousActiveWindow = v.Name()
 	g.SetCurrentView(FILTER_VIEW)
 	FilterView.Title = fmt.Sprintf("Filter %s", v.Title)
 	return nil
@@ -587,16 +548,16 @@ func SwitchToFilterView(g *c.Gui, v *c.View) error {
 func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 	locationName := GetElementByCursor(v)
-	State.selectedRepo = locationName
+	State.SelectedRepo = locationName
 
-	repo := overview.GetRepoByLocation(locationName)
+	repo := Overview.GetRepoByLocation(locationName)
 
-	overview.AppendJobsToRepository(repo.Location, client.GetJobsInRepository(repo))
+	Overview.AppendJobsToRepository(repo.Location, Client.GetJobsInRepository(repo))
 
 	JobsView.Title = fmt.Sprintf("%s - Jobs", locationName)
 	JobsView.Clear()
-	currentJobsList = overview.GetJobNamesInRepository(locationName)
-	FillViewWithItems(JobsView, currentJobsList)
+	CurrentJobsList = Overview.GetJobNamesInRepository(locationName)
+	FillViewWithItems(JobsView, CurrentJobsList)
 
 	ResetCursor(g, JOBS_VIEW)
 	return SetFocus(g, JOBS_VIEW, v.Name())
@@ -606,13 +567,13 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
 	jobName := GetElementByCursor(v)
-	State.selectedJob = jobName
+	State.SelectedJob = jobName
 
-	repo := overview.GetRepoByLocation(State.selectedRepo)
+	repo := Overview.GetRepoByLocation(State.SelectedRepo)
 
-	pipelineRuns := client.GetPipelineRuns(repo, State.selectedJob, 10)
-	overview.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
-	runs := overview.GetRunsFor(State.selectedRepo, State.selectedJob)
+	pipelineRuns := Client.GetPipelineRuns(repo, State.SelectedJob, 10)
+	Overview.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
+	runs := Overview.GetRunsFor(State.SelectedRepo, State.SelectedJob)
 	runInfos = make([]string, 0)
 	// TODO make headers skippable in navigation
 	// runInfos = append(runInfos, "Status \t RunId \t Time")
@@ -620,20 +581,20 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 		runInfos = append(runInfos, fmt.Sprintf("%s \t %s", run.Status, run.RunId))
 	}
 
-	RunsView.Title = fmt.Sprintf("%s - Runs", State.selectedJob)
+	RunsView.Title = fmt.Sprintf("%s - Runs", State.SelectedJob)
 	RunsView.Clear()
 	FillViewWithItems(RunsView, runInfos)
 
 	ResetCursor(g, RUNS_VIEW)
-	RunsView.SetCursor(0,0)
-	
+	RunsView.SetCursor(0, 0)
+
 	setRunInformation(RunsView)
 	return SetFocus(g, RUNS_VIEW, v.Name())
 }
 
 func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
-	client.LaunchRunForJob(*overview.Repositories[State.selectedRepo], State.selectedJob, LaunchRunWindow.BufferLines())
+	Client.LaunchRunForJob(*Overview.Repositories[State.SelectedRepo], State.SelectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
 	LoadRunsForJob(g, JobsView)
 
@@ -669,32 +630,12 @@ func GetContentByView(v *c.View) []string {
 	name := v.Name()
 	switch name {
 	case REPOSITORIES_VIEW:
-		return currentRepositoriesList
+		return CurrentRepositoriesList
 	case JOBS_VIEW:
-		return currentJobsList
+		return CurrentJobsList
 	case RUNS_VIEW:
 		return runInfos
 	}
 	return []string{}
 
-}
-
-func GetElementByCursor(v *c.View) string {
-	_, oy := v.Origin()
-	_, vy := v.Cursor()
-
-	items := GetContentByView(v)
-
-	return items[vy+oy]
-}
-
-func ResetCursor(g *c.Gui, name string) error {
-	v, err := g.View(name)
-	if err != nil {
-		return err
-	}
-	v.SetCursor(0, 0)
-	v.SetOrigin(0, 0)
-
-	return nil
 }

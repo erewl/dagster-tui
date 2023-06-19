@@ -1,6 +1,6 @@
-package datastructures
+package internal
 
- const (
+const (
 	KeyMap string = `Everywhere
 --
 q           Closes the application
@@ -37,4 +37,4 @@ ctrl + /    Toggle comment in selected line
 Arrow Keys  Navigation (TBD)
 
 `
- )
+)

@@ -1,4 +1,4 @@
-package datastructures
+package internal
 
 type Repository struct {
 	Name     string `json:"name"`
