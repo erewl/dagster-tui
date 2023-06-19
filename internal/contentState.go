@@ -32,6 +32,14 @@ type Overview struct {
 	Repositories map[string]*RepositoryRepresentation
 }
 
+func (o *Overview) GetRepositoryList() []RepositoryRepresentation {
+	var names []RepositoryRepresentation
+	for _, v := range o.Repositories {
+		names = append(names, *v)
+	}
+	return names
+}
+
 func (o *Overview) GetRepositoryNames() []string {
 	var names []string
 	for k := range o.Repositories {

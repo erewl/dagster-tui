@@ -71,15 +71,14 @@ func main() {
 
 	SetWindowColors(g, REPOSITORIES_VIEW, "red")
 
-	Overview.AppendRepositories(Client.LoadRepositories())
-
-	CurrentRepositoriesList = Overview.GetRepositoryNames()
-	FillViewWithItems(RepositoriesView, CurrentRepositoriesList)
+	repos := Client.LoadRepositories()
+	Overview.AppendRepositories(repos)
+	RepoWindow.RenderItems(Overview.GetRepositoryList())
 
 	environmentInfo := []string{strings.TrimPrefix(Overview.Url, "https://")}
 	FillViewWithItems(EnvironmentInfoView, environmentInfo)
 
-	SetViewStyles(RepositoriesView)
+	SetViewStyles(RepoWindow.View)
 	SetViewStyles(JobsView)
 	SetViewStyles(RunsView)
 	FilterView.Editable = true

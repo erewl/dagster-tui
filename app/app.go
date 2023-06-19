@@ -15,7 +15,7 @@ import (
 	c "github.com/jroimartin/gocui"
 )
 
-type TransformFunc func(any) []string
+type TransformFunc[T any] func(T) string
 
 type Window[T any] struct {
 	View              *c.View
@@ -24,28 +24,40 @@ type Window[T any] struct {
 	Title             string
 	Elements          []string
 	RawElements       []T
-	TransformRawToStr TransformFunc
+	TransformRawToStr TransformFunc[T]
 }
 
-func (w *Window[T]) SetView(g *c.Gui) error {
-	if _, err := g.SetView(REPOSITORIES_VIEW, w.StartX, w.StartY, w.EndX, w.EndY); err != nil {
+func (w *Window[T]) RenderView(g *c.Gui) error {
+	_, err := g.SetView(w.View.Name(), w.StartX, w.StartY, w.EndX, w.EndY)
+	w.View.Title = w.Title
+	return err
+}
+
+func (w *Window[T]) SetView(g *c.Gui, viewName string) error {
+	tempView, err := g.SetView(viewName, 0, 0, 1, 1)
+	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
+	w.View = tempView
 	return nil
 }
 
 // Replacing FillViewWithItems
-func (w *Window[T]) RenderItems() {
+func (w *Window[T]) RenderItems(items []T) {
+	w.RawElements = items
+	w.Elements = make([]string, 0)
 	w.View.Clear()
-	for _, item := range w.Elements {
-		fmt.Fprintln(w.View, item)
+	for _, item := range items {
+		itemStr := w.TransformRawToStr(item)
+		w.Elements = append(w.Elements, itemStr)
+		fmt.Fprintln(w.View, itemStr)
 	}
 }
 
 var (
-	RepositoriesView    *c.View
+	// RepositoriesView    *c.View
 	JobsView            *c.View
 	RunsView            *c.View
 	RunInfoView         *c.View
@@ -55,14 +67,13 @@ var (
 	FilterView          *c.View
 	EnvironmentInfoView *c.View
 
-	RepoWindow *Window[s.Repository]
+	RepoWindow *Window[s.RepositoryRepresentation]
 
 	Overview *s.Overview
 	State    *ApplicationState
 	Conf     Config
 
-	CurrentRepositoriesList []string
-	CurrentJobsList         []string
+	CurrentJobsList []string
 
 	runInfos []string
 
@@ -79,9 +90,11 @@ const (
 	RUN_INFO_VIEW     = "run_info"
 	KEY_MAPPINGS_VIEW = "keymaps"
 	LAUNCH_RUN_VIEW   = "launch_run"
-	FEEDBACK_VIEW     = "feedback"
 	FILTER_VIEW       = "filter"
 	ENVIRONMENT_INFO  = "environment"
+
+	FEEDBACK_VIEW     = "feedback"
+	CONFIRMATION_VIEW = "confirmation"
 )
 
 type ApplicationState struct {
@@ -135,21 +148,19 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 	return nil
 }
 
+func RepoToStr(a s.RepositoryRepresentation) string {
+	return a.Name
+}
+
 func InitializeViews(g *c.Gui) error {
 	// Create windows, position is irrelevant
-	// TODO proper error handling here
-	view, err := g.SetView(REPOSITORIES_VIEW, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
+	RepoWindow = &Window[s.RepositoryRepresentation]{
+		Title:             "Repositories",
+		TransformRawToStr: RepoToStr,
 	}
-	RepoWindow = &Window[s.Repository]{
-		Title: "Repositories",
-		View:  view,
-	}
+	RepoWindow.SetView(g, REPOSITORIES_VIEW)
 
-	initializeView(g, &RepositoriesView, REPOSITORIES_VIEW, "Repositories")
+	// initializeView(g, &RepositoriesView, REPOSITORIES_VIEW, "Repositories")
 	initializeView(g, &JobsView, JOBS_VIEW, "Jobs")
 	initializeView(g, &RunsView, RUNS_VIEW, "Runs")
 	initializeView(g, &RunInfoView, RUN_INFO_VIEW, "Run Info")
@@ -178,11 +189,9 @@ func Layout(g *c.Gui) error {
 
 	// Create windows
 	// most left
-	if _, err := g.SetView(REPOSITORIES_VIEW, window1X, yOffset, window1X+windowWidth/2, windowHeight+1); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
+	RepoWindow.StartX, RepoWindow.StartY, RepoWindow.EndX, RepoWindow.EndY = window1X, yOffset, window1X+windowWidth/2, windowHeight+1
+	RepoWindow.RenderView(g)
+
 	// on top of REPOSITORIES_VIEW
 	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
@@ -339,46 +348,6 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	LaunchRunWindow.SelBgColor = c.ColorBlue
 	LaunchRunWindow.SetCursor(0, 0)
 
-	// x,y := LaunchRunWindow.Cursor()
-	// currentLine, _ := LaunchRunWindow.Line(y)
-
-	// 	sampleYaml := `execution:
-	//   config:
-	//     job_namespace: dagster
-	//     max_concurrent: 20
-	//     service_account_name: dagster
-	// ops:
-	//   op_get_e2e_input:
-	//     config:
-	//       test_selection:
-	//       - AllocationDataAddNewDeterministicAsset
-	//       # - AllocationDataCheckMaxCapacity
-	//       # - AllocationDataCheckPreviousDaysProductionActivity
-	//       # - AllocationDataCheckProductionDates
-	//       # - AllocationDataChecksumModelRegistry
-	//       # - AllocationDataComputeEstimatedModelType
-	//       # - AllocationDataMonitorAllocation
-	//       # - AllocationDataSyncAllocationCassandraEcedo
-	//       # - AllocationDataUpdateCorrectConnectionProperties
-	//       # - Evaluate
-	//       # - PredictBio
-	//       # - PredictDetSolar
-	//       # - PredictDetWind
-	//       # - PredictMlSolar
-	//       # - PredictMlWind
-	//       # - PredictSolarKNMI10MinActuals
-	//       # - PredictWindKNMI10MinActuals
-	// resources:
-	//   io_manager:
-	//     config:
-	//       s3_bucket: vdb-app-dagster-test-iomanager
-	//       s3_prefix: e2e
-	//   slack:
-	//     config:
-	//       token:
-	//         env: SLACK_BOT_TOKEN`
-	// fmt.Fprintln(LaunchRunWindow, sampleYaml)
-
 	runConfig := ""
 	if v.Name() == RUNS_VIEW {
 		SelectedRun := GetElementByCursor(v)
@@ -467,6 +436,9 @@ func SetKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenPopupLaunchWindow); err != nil {
 		panic(err)
 	}
+	if err := g.SetKeybinding(RUNS_VIEW, 't', c.ModNone, TerminateRunWithConfirmationByRunId); err != nil {
+		panic(err)
+	}
 	if err := g.SetKeybinding(RUNS_VIEW, 'T', c.ModNone, TerminateRunByRunId); err != nil {
 		panic(err)
 	}
@@ -477,6 +449,20 @@ func SetKeybindings(g *c.Gui) error {
 		panic(err)
 	}
 
+	return nil
+}
+
+func OpenConfirmationWindow(message string, options []string) (int, error) {
+
+	return 0, nil
+}
+
+func OpenFeedbackWindow(message string) error {
+	// lengthOfMessage :=  len(message)
+	return nil
+}
+
+func TerminateRunWithConfirmationByRunId(g *c.Gui, v *c.View) error {
 	return nil
 }
 
@@ -499,7 +485,7 @@ func setRunInformation(v *c.View) {
 		s := time.Unix(int64(run.StartTime), 0)
 		e := time.Unix(int64(run.EndTime), 0)
 		duration := e.Sub(s)
-		// 2006-1-2 15:4:5
+
 		runInfo = append(runInfo, fmt.Sprintf("Start\t\t %s", s.Local().Format(("2006-01-02 15:04:05"))))
 		runInfo = append(runInfo, fmt.Sprintf("End\t\t %s", e.Local().Format("2006-01-02 15:04:05")))
 		runInfo = append(runInfo, fmt.Sprintf("Duration\t\t %s", duration.String()))
@@ -526,10 +512,9 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 	switch State.PreviousActiveWindow {
 	case REPOSITORIES_VIEW:
 		filterTerm := FilterView.BufferLines()[0]
-		cond_contains_term := func(s string) bool { return strings.Contains(s, filterTerm) }
-		CurrentRepositoriesList = filter(Overview.GetRepositoryNames(), cond_contains_term)
-
-		FillViewWithItems(RepositoriesView, CurrentRepositoriesList)
+		cond_contains_term := func(repo s.RepositoryRepresentation) bool { return strings.Contains(repo.Name, filterTerm) }
+		currentRepositoriesList := filter(Overview.GetRepositoryList(), cond_contains_term)
+		RepoWindow.RenderItems(currentRepositoriesList)
 	default:
 		return nil
 
@@ -630,7 +615,7 @@ func GetContentByView(v *c.View) []string {
 	name := v.Name()
 	switch name {
 	case REPOSITORIES_VIEW:
-		return CurrentRepositoriesList
+		return Overview.GetRepositoryNames()
 	case JOBS_VIEW:
 		return CurrentJobsList
 	case RUNS_VIEW:

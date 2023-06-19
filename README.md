@@ -37,3 +37,8 @@ and running application with:
 ```
 ~/go/bin/dagsterui -e <dagster-environment>
 ```
+
+Run tests with:
+```
+go test ./test/
+```
