@@ -73,8 +73,7 @@ func main() {
 
 	repos := Client.LoadRepositories()
 	Overview.AppendRepositories(repos)
-	sortedCurrentRepositoriesList := s.SortBy(Overview.GetRepositoryList(), func(repo s.RepositoryRepresentation) string { return repo.Location } )
-	RepoWindow.RenderItems(sortedCurrentRepositoriesList)
+	RepoWindow.RenderItems(Overview.GetRepositoryList())
 
 	environmentInfo := []string{strings.TrimPrefix(Overview.Url, "https://")}
 	FillViewWithItems(EnvironmentInfoView, environmentInfo)

@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"fmt"
+	c "github.com/jroimartin/gocui"
 	"io/ioutil"
 	s "nl/vdb/dagstertui/internal"
 	"os"
@@ -11,12 +12,10 @@ import (
 	"runtime"
 	"strings"
 	"time"
-	c "github.com/jroimartin/gocui"
 )
 
-
-
 type TransformFunc[T any] func(T) string
+type SortOnFunc[T any] func(T) string
 
 type Window[T any] struct {
 	View              *c.View
@@ -26,6 +25,8 @@ type Window[T any] struct {
 	Elements          []string
 	RawElements       []T
 	TransformRawToStr TransformFunc[T]
+	// TODO how to make string more generic, right now we have the assumption that the rendered elements will be a string
+	SortElementsOn    SortOnFunc[T]
 }
 
 func (w *Window[T]) RenderView(g *c.Gui) error {
@@ -49,7 +50,8 @@ func (w *Window[T]) SetView(g *c.Gui, viewName string) error {
 func (w *Window[T]) RenderItems(items []T) {
 	w.RawElements = make([]T, 0)
 	w.Elements = make([]string, 0)
-	w.RawElements = items
+	w.RawElements = s.SortBy(items, w.SortElementsOn)
+
 	for _, item := range w.RawElements {
 		itemStr := w.TransformRawToStr(item)
 		w.Elements = append(w.Elements, itemStr)
@@ -156,17 +158,17 @@ func InitializeViews(g *c.Gui) error {
 	RepoWindow = &Window[s.RepositoryRepresentation]{
 		Title:             "Repositories",
 		TransformRawToStr: func(a s.RepositoryRepresentation) string { return a.Location },
+		SortElementsOn: func(a s.RepositoryRepresentation) string { return a.Location },
 	}
 	RepoWindow.SetView(g, REPOSITORIES_VIEW)
 
 	JobsWindow = &Window[s.JobRepresentation]{
 		Title:             "Jobs",
 		TransformRawToStr: func(a s.JobRepresentation) string { return a.Name },
+		SortElementsOn: func(a s.JobRepresentation) string { return a.Name },
 	}
 	JobsWindow.SetView(g, JOBS_VIEW)
 
-	// initializeView(g, &RepositoriesView, REPOSITORIES_VIEW, "Repositories")
-	// initializeView(g, &JobsView, JOBS_VIEW, "Jobs")
 	initializeView(g, &RunsView, RUNS_VIEW, "Runs")
 	initializeView(g, &RunInfoView, RUN_INFO_VIEW, "Run Info")
 	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
@@ -198,7 +200,7 @@ func Layout(g *c.Gui) error {
 	RepoWindow.RenderView(g)
 
 	// left of REPOSITORIES_VIEW
-	JobsWindow.StartX, JobsWindow.StartY, JobsWindow.EndX, JobsWindow.EndY  = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
+	JobsWindow.StartX, JobsWindow.StartY, JobsWindow.EndX, JobsWindow.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
 	JobsWindow.RenderView(g)
 
 	// on top of REPOSITORIES_VIEW
@@ -517,8 +519,7 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 		filterTerm := FilterView.BufferLines()[0]
 		cond_contains_term := func(repo s.RepositoryRepresentation) bool { return strings.Contains(repo.Name, filterTerm) }
 		currentRepositoriesList := s.Filter(Overview.GetRepositoryList(), cond_contains_term)
-		sortedCurrentRepositoriesList := s.SortBy(currentRepositoriesList, func(repo s.RepositoryRepresentation) string { return repo.Name } )
-		RepoWindow.RenderItems(sortedCurrentRepositoriesList)
+		RepoWindow.RenderItems(currentRepositoriesList)
 	default:
 		return nil
 

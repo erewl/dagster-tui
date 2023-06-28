@@ -49,18 +49,11 @@ func (o *Overview) GetRepositoryNames() []string {
 	return names
 }
 
-
-// Maybe we dont even need this sorting
-// func GetJobName(j JobRepresentation) string {
-// 	return j.Name
-// }
-
 func (o *Overview) GetJobNamesInRepository(repo string) []JobRepresentation {
 	var names []JobRepresentation
 	for _, v := range o.Repositories[repo].Jobs {
 		names = append(names, *v)
 	}
-	// names = SortBy(names, GetJobName)
 	return names
 }
 
