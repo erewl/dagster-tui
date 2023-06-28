@@ -24,6 +24,36 @@ type BaseView struct {
 	Title          string
 }
 
+type InfoView struct {
+	Base    BaseView
+	Content []string
+}
+
+func (w *InfoView) SetView(g *c.Gui, viewName string) error {
+	tempView, err := g.SetView(viewName, 0, 0, 1, 1)
+	if err != nil {
+		if err != c.ErrUnknownView {
+			return err
+		}
+	}
+	w.Base.View = tempView
+	return nil
+}
+
+func (w *InfoView) RenderContent(content []string) {
+	w.Content = content
+	w.Base.View.Clear()
+	for _, item := range w.Content {
+		fmt.Fprintln(w.Base.View, item)
+	}
+}
+
+func (w *InfoView) RenderView(g *c.Gui) error {
+	_, err := g.SetView(w.Base.View.Name(), w.Base.StartX, w.Base.StartY, w.Base.EndX, w.Base.EndY)
+	w.Base.View.Title = w.Base.Title
+	return err
+}
+
 type ListView[T any] struct {
 	Base              BaseView
 	Elements          []string
@@ -62,7 +92,6 @@ func (w *ListView[T]) GetElementOnCursorPosition() string {
 	return w.Elements[vy+oy]
 }
 
-// Replacing FillViewWithItems
 func (w *ListView[T]) RenderItems(items []T) {
 	w.RawElements = make([]T, 0)
 	w.Elements = make([]string, 0)
@@ -79,16 +108,16 @@ func (w *ListView[T]) RenderItems(items []T) {
 }
 
 var (
-	RunInfoView         *c.View
 	KeyMappingsView     *c.View
 	LaunchRunWindow     *c.View
 	FeedbackView        *c.View
 	FilterView          *c.View
 	EnvironmentInfoView *c.View
 
-	RunsWindow *ListView[s.RunRepresentation]
-	RepoWindow *ListView[s.RepositoryRepresentation]
-	JobsWindow *ListView[s.JobRepresentation]
+	RunInfoWindow *InfoView
+	RunsWindow    *ListView[s.RunRepresentation]
+	RepoWindow    *ListView[s.RepositoryRepresentation]
+	JobsWindow    *ListView[s.JobRepresentation]
 
 	Overview *s.Overview
 	State    *ApplicationState
@@ -193,7 +222,13 @@ func InitializeViews(g *c.Gui) error {
 	}
 	RunsWindow.SetView(g, RUNS_VIEW)
 
-	initializeView(g, &RunInfoView, RUN_INFO_VIEW, "Run Info")
+	RunInfoWindow = &InfoView{
+		Base: BaseView{
+			Title: "Run Info",
+		},
+	}
+	RunInfoWindow.SetView(g, RUN_INFO_VIEW)
+
 	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
 	initializeView(g, &EnvironmentInfoView, ENVIRONMENT_INFO, "Info")
 
@@ -220,15 +255,19 @@ func Layout(g *c.Gui) error {
 	// Create windows
 	// most left
 	RepoWindow.Base.StartX, RepoWindow.Base.StartY, RepoWindow.Base.EndX, RepoWindow.Base.EndY = window1X, yOffset, window1X+windowWidth/2, windowHeight+1
-	JobsWindow.Base.StartX, JobsWindow.Base.StartY, JobsWindow.Base.EndX, JobsWindow.Base.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
-	RunsWindow.Base.StartX, RunsWindow.Base.StartY, RunsWindow.Base.EndX, RunsWindow.Base.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
 	RepoWindow.RenderView(g)
 
 	// left of REPOSITORIES_VIEW
+	JobsWindow.Base.StartX, JobsWindow.Base.StartY, JobsWindow.Base.EndX, JobsWindow.Base.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
 	JobsWindow.RenderView(g)
 
-	// left of JOBS_VIEW
+	// left of JOBS_VIEW /  most right
+	RunsWindow.Base.StartX, RunsWindow.Base.StartY, RunsWindow.Base.EndX, RunsWindow.Base.EndY = window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0))
 	RunsWindow.RenderView(g)
+
+	// below RUNS_VIEW
+	RunInfoWindow.Base.StartX, RunInfoWindow.Base.StartY, RunInfoWindow.Base.EndX, RunInfoWindow.Base.EndY = window3X, int(2.0*(windowHeight/3.0))+1, window3X+windowWidth, windowHeight+1
+	RunInfoWindow.RenderView(g)
 
 	// on top of REPOSITORIES_VIEW
 	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
@@ -237,18 +276,7 @@ func Layout(g *c.Gui) error {
 		}
 	}
 
-	// most right
-	if _, err := g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0))); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	// underneath RUNS_VIEW
-	if _, err := g.SetView(RUN_INFO_VIEW, window3X, int(2.0*(windowHeight/3.0))+1, window3X+windowWidth, windowHeight+1); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
+
 	// TODO ok for now, but could be more content-agnostic
 	// top right corner
 	if _, err := g.SetView(ENVIRONMENT_INFO, window3X+windowWidth-len(Overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1); err != nil {
@@ -508,7 +536,6 @@ func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 }
 
 func setRunInformation(v *c.View) {
-	RunInfoView.Clear()
 	if v.Name() == RUNS_VIEW && len(v.ViewBufferLines()) > 0 {
 		SelectedRun := RunsWindow.GetElementOnCursorPosition()
 		run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
@@ -523,7 +550,7 @@ func setRunInformation(v *c.View) {
 		runInfo = append(runInfo, fmt.Sprintf("Duration\t\t %s", duration.String()))
 		runInfo = append(runInfo, fmt.Sprintf("Status\t\t %s", run.Status))
 
-		FillViewWithItems(RunInfoView, runInfo)
+		RunInfoWindow.RenderContent(runInfo)
 	}
 }
 
