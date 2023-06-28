@@ -17,11 +17,15 @@ import (
 type TransformFunc[T any] func(T) string
 type SortOnFunc[T any] func(T) string
 
+type BaseView struct {
+	View           *c.View
+	StartX, StartY int
+	EndX, EndY     int
+	Title          string
+}
+
 type ListView[T any] struct {
-	View              *c.View
-	StartX, StartY    int
-	EndX, EndY        int
-	Title             string
+	Base              BaseView
 	Elements          []string
 	RawElements       []T
 	TransformRawToStr TransformFunc[T]
@@ -30,8 +34,8 @@ type ListView[T any] struct {
 }
 
 func (w *ListView[T]) RenderView(g *c.Gui) error {
-	_, err := g.SetView(w.View.Name(), w.StartX, w.StartY, w.EndX, w.EndY)
-	w.View.Title = w.Title
+	_, err := g.SetView(w.Base.View.Name(), w.Base.StartX, w.Base.StartY, w.Base.EndX, w.Base.EndY)
+	w.Base.View.Title = w.Base.Title
 	return err
 }
 
@@ -42,18 +46,18 @@ func (w *ListView[T]) SetView(g *c.Gui, viewName string) error {
 			return err
 		}
 	}
-	w.View = tempView
+	w.Base.View = tempView
 	return nil
 }
 
 func (w *ListView[T]) ResetCursor() {
-	w.View.SetOrigin(0, 0)
-	w.View.SetCursor(0, 0)
+	w.Base.View.SetOrigin(0, 0)
+	w.Base.View.SetCursor(0, 0)
 }
 
 func (w *ListView[T]) GetElementOnCursorPosition() string {
-	_, oy := w.View.Origin()
-	_, vy := w.View.Cursor()
+	_, oy := w.Base.View.Origin()
+	_, vy := w.Base.View.Cursor()
 
 	return w.Elements[vy+oy]
 }
@@ -68,9 +72,9 @@ func (w *ListView[T]) RenderItems(items []T) {
 		itemStr := w.TransformRawToStr(item)
 		w.Elements = append(w.Elements, itemStr)
 	}
-	w.View.Clear()
+	w.Base.View.Clear()
 	for _, item := range w.Elements {
-		fmt.Fprintln(w.View, item)
+		fmt.Fprintln(w.Base.View, item)
 	}
 }
 
@@ -164,21 +168,26 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 func InitializeViews(g *c.Gui) error {
 	// Create windows, position is irrelevant
 	RepoWindow = &ListView[s.RepositoryRepresentation]{
-		Title:             "Repositories",
+		Base: BaseView{
+			Title: "Repositories",
+		},
 		TransformRawToStr: func(a s.RepositoryRepresentation) string { return a.Location },
 		SortElementsOn:    func(a s.RepositoryRepresentation) string { return a.Location },
 	}
 	RepoWindow.SetView(g, REPOSITORIES_VIEW)
 
 	JobsWindow = &ListView[s.JobRepresentation]{
-		Title:             "Jobs",
-		TransformRawToStr: func(a s.JobRepresentation) string { return a.Name },
-		SortElementsOn:    func(a s.JobRepresentation) string { return a.Name },
+		Base: BaseView{
+			Title: "Jobs",
+		}, TransformRawToStr: func(a s.JobRepresentation) string { return a.Name },
+		SortElementsOn: func(a s.JobRepresentation) string { return a.Name },
 	}
 	JobsWindow.SetView(g, JOBS_VIEW)
 
 	RunsWindow = &ListView[s.RunRepresentation]{
-		Title:             "Runs",
+		Base: BaseView{
+			Title: "Runs",
+		},
 		TransformRawToStr: func(a s.RunRepresentation) string { return fmt.Sprintf("%s \t %s", a.Status, a.RunId) },
 		SortElementsOn:    func(a s.RunRepresentation) string { return fmt.Sprint(a.StartTime) },
 	}
@@ -210,15 +219,15 @@ func Layout(g *c.Gui) error {
 
 	// Create windows
 	// most left
-	RepoWindow.StartX, RepoWindow.StartY, RepoWindow.EndX, RepoWindow.EndY = window1X, yOffset, window1X+windowWidth/2, windowHeight+1
+	RepoWindow.Base.StartX, RepoWindow.Base.StartY, RepoWindow.Base.EndX, RepoWindow.Base.EndY = window1X, yOffset, window1X+windowWidth/2, windowHeight+1
+	JobsWindow.Base.StartX, JobsWindow.Base.StartY, JobsWindow.Base.EndX, JobsWindow.Base.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
+	RunsWindow.Base.StartX, RunsWindow.Base.StartY, RunsWindow.Base.EndX, RunsWindow.Base.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
 	RepoWindow.RenderView(g)
 
 	// left of REPOSITORIES_VIEW
-	JobsWindow.StartX, JobsWindow.StartY, JobsWindow.EndX, JobsWindow.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
 	JobsWindow.RenderView(g)
 
 	// left of JOBS_VIEW
-	RunsWindow.StartX, RunsWindow.StartY, RunsWindow.EndX, RunsWindow.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
 	RunsWindow.RenderView(g)
 
 	// on top of REPOSITORIES_VIEW
@@ -494,7 +503,7 @@ func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 	run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
 	Client.TerminateRun(run.RunId)
 
-	LoadRunsForJob(g, JobsWindow.View)
+	LoadRunsForJob(g, JobsWindow.Base.View)
 	return nil
 }
 
@@ -554,7 +563,7 @@ func SwitchToFilterView(g *c.Gui, v *c.View) error {
 }
 
 func LoadJobsForRepository(g *c.Gui, v *c.View) error {
-	
+
 	locationName := RepoWindow.GetElementOnCursorPosition()
 	State.SelectedRepo = locationName
 
@@ -562,8 +571,8 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 	Overview.AppendJobsToRepository(repo.Location, Client.GetJobsInRepository(repo))
 
-	JobsWindow.Title = fmt.Sprintf("%s - Jobs", locationName)
-	JobsWindow.View.Clear()
+	JobsWindow.Base.Title = fmt.Sprintf("%s - Jobs", locationName)
+	JobsWindow.Base.View.Clear()
 	JobsWindow.RenderItems(Overview.GetJobNamesInRepository(locationName))
 
 	JobsWindow.ResetCursor()
@@ -584,11 +593,11 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	// TODO make headers skippable in navigation
 	// runInfos = append(runInfos, "Status \t RunId \t Time")
 
-	RunsWindow.Title = fmt.Sprintf("%s - Runs", State.SelectedJob)
+	RunsWindow.Base.Title = fmt.Sprintf("%s - Runs", State.SelectedJob)
 	RunsWindow.RenderItems(runs)
 	RunsWindow.ResetCursor()
 
-	setRunInformation(RunsWindow.View)
+	setRunInformation(RunsWindow.Base.View)
 	return SetFocus(g, RUNS_VIEW, v.Name())
 }
 
@@ -596,7 +605,7 @@ func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
 	Client.LaunchRunForJob(*Overview.Repositories[State.SelectedRepo], State.SelectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
-	LoadRunsForJob(g, JobsWindow.View)
+	LoadRunsForJob(g, JobsWindow.Base.View)
 
 	return nil
 }

@@ -78,9 +78,9 @@ func main() {
 	environmentInfo := []string{strings.TrimPrefix(Overview.Url, "https://")}
 	FillViewWithItems(EnvironmentInfoView, environmentInfo)
 
-	SetViewStyles(RepoWindow.View)
-	SetViewStyles(JobsWindow.View)
-	SetViewStyles(RunsWindow.View)
+	SetViewStyles(RepoWindow.Base.View)
+	SetViewStyles(JobsWindow.Base.View)
+	SetViewStyles(RunsWindow.Base.View)
 	FilterView.Editable = true
 	FilterView.Editor = DefaultEditor
 
