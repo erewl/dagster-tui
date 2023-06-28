@@ -17,7 +17,7 @@ import (
 type TransformFunc[T any] func(T) string
 type SortOnFunc[T any] func(T) string
 
-type Window[T any] struct {
+type ListView[T any] struct {
 	View              *c.View
 	StartX, StartY    int
 	EndX, EndY        int
@@ -29,13 +29,13 @@ type Window[T any] struct {
 	SortElementsOn    SortOnFunc[T]
 }
 
-func (w *Window[T]) RenderView(g *c.Gui) error {
+func (w *ListView[T]) RenderView(g *c.Gui) error {
 	_, err := g.SetView(w.View.Name(), w.StartX, w.StartY, w.EndX, w.EndY)
 	w.View.Title = w.Title
 	return err
 }
 
-func (w *Window[T]) SetView(g *c.Gui, viewName string) error {
+func (w *ListView[T]) SetView(g *c.Gui, viewName string) error {
 	tempView, err := g.SetView(viewName, 0, 0, 1, 1)
 	if err != nil {
 		if err != c.ErrUnknownView {
@@ -47,7 +47,7 @@ func (w *Window[T]) SetView(g *c.Gui, viewName string) error {
 }
 
 // Replacing FillViewWithItems
-func (w *Window[T]) RenderItems(items []T) {
+func (w *ListView[T]) RenderItems(items []T) {
 	w.RawElements = make([]T, 0)
 	w.Elements = make([]string, 0)
 	w.RawElements = s.SortBy(items, w.SortElementsOn)
@@ -71,8 +71,8 @@ var (
 	FilterView          *c.View
 	EnvironmentInfoView *c.View
 
-	RepoWindow *Window[s.RepositoryRepresentation]
-	JobsWindow *Window[s.JobRepresentation]
+	RepoWindow *ListView[s.RepositoryRepresentation]
+	JobsWindow *ListView[s.JobRepresentation]
 
 	Overview *s.Overview
 	State    *ApplicationState
@@ -155,14 +155,14 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 
 func InitializeViews(g *c.Gui) error {
 	// Create windows, position is irrelevant
-	RepoWindow = &Window[s.RepositoryRepresentation]{
+	RepoWindow = &ListView[s.RepositoryRepresentation]{
 		Title:             "Repositories",
 		TransformRawToStr: func(a s.RepositoryRepresentation) string { return a.Location },
 		SortElementsOn: func(a s.RepositoryRepresentation) string { return a.Location },
 	}
 	RepoWindow.SetView(g, REPOSITORIES_VIEW)
 
-	JobsWindow = &Window[s.JobRepresentation]{
+	JobsWindow = &ListView[s.JobRepresentation]{
 		Title:             "Jobs",
 		TransformRawToStr: func(a s.JobRepresentation) string { return a.Name },
 		SortElementsOn: func(a s.JobRepresentation) string { return a.Name },
@@ -544,7 +544,7 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 	Overview.AppendJobsToRepository(repo.Location, Client.GetJobsInRepository(repo))
 
-	JobsWindow.View.Title = fmt.Sprintf("%s - Jobs", locationName)
+	JobsWindow.Title = fmt.Sprintf("%s - Jobs", locationName)
 	JobsWindow.View.Clear()
 	JobsWindow.RenderItems(Overview.GetJobNamesInRepository(locationName))
 	// CurrentJobsList = Overview.GetJobNamesInRepository(locationName)
