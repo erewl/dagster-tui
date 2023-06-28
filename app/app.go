@@ -46,9 +46,16 @@ func (w *ListView[T]) SetView(g *c.Gui, viewName string) error {
 	return nil
 }
 
-func (w * ListView[T]) ResetCursor() {
+func (w *ListView[T]) ResetCursor() {
 	w.View.SetOrigin(0, 0)
-	w.View.SetCursor(0,0)
+	w.View.SetCursor(0, 0)
+}
+
+func (w *ListView[T]) GetElementOnCursorPosition() string {
+	_, oy := w.View.Origin()
+	_, vy := w.View.Cursor()
+
+	return w.Elements[vy+oy]
 }
 
 // Replacing FillViewWithItems
@@ -153,7 +160,6 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 	*viewRep = view
 	return nil
 }
-
 
 func InitializeViews(g *c.Gui) error {
 	// Create windows, position is irrelevant
@@ -283,7 +289,7 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 	case RUNS_VIEW:
 		runId := State.SelectedRun
 		if runId == "" {
-			runId = Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, GetElementByCursor(v)).RunId
+			runId = Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, RunsWindow.GetElementOnCursorPosition()).RunId
 		}
 		if runId != "" {
 			openbrowser(fmt.Sprintf("%s/runs/%s", Overview.Url, runId))
@@ -368,7 +374,7 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 
 	runConfig := ""
 	if v.Name() == RUNS_VIEW {
-		SelectedRun := GetElementByCursor(v)
+		SelectedRun := RunsWindow.GetElementOnCursorPosition()
 		runConfig = Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun).RunconfigYaml
 	} else {
 		runConfig = Overview.Repositories[State.SelectedRepo].Jobs[State.SelectedJob].DefaultRunConfigYaml
@@ -484,7 +490,7 @@ func TerminateRunWithConfirmationByRunId(g *c.Gui, v *c.View) error {
 }
 
 func TerminateRunByRunId(g *c.Gui, v *c.View) error {
-	SelectedRun := GetElementByCursor(v)
+	SelectedRun := RunsWindow.GetElementOnCursorPosition()
 	run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
 	Client.TerminateRun(run.RunId)
 
@@ -495,7 +501,7 @@ func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 func setRunInformation(v *c.View) {
 	RunInfoView.Clear()
 	if v.Name() == RUNS_VIEW && len(v.ViewBufferLines()) > 0 {
-		SelectedRun := GetElementByCursor(v)
+		SelectedRun := RunsWindow.GetElementOnCursorPosition()
 		run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
 		runInfo := make([]string, 0)
 
@@ -548,8 +554,8 @@ func SwitchToFilterView(g *c.Gui, v *c.View) error {
 }
 
 func LoadJobsForRepository(g *c.Gui, v *c.View) error {
-
-	locationName := GetElementByCursor(v)
+	
+	locationName := RepoWindow.GetElementOnCursorPosition()
 	State.SelectedRepo = locationName
 
 	repo := Overview.GetRepoByLocation(locationName)
@@ -559,16 +565,15 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 	JobsWindow.Title = fmt.Sprintf("%s - Jobs", locationName)
 	JobsWindow.View.Clear()
 	JobsWindow.RenderItems(Overview.GetJobNamesInRepository(locationName))
-	// CurrentJobsList = Overview.GetJobNamesInRepository(locationName)
 
-	ResetCursor(g, JOBS_VIEW)
+	JobsWindow.ResetCursor()
 	return SetFocus(g, JOBS_VIEW, v.Name())
 
 }
 
 func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
-	jobName := GetElementByCursor(v)
+	jobName := JobsWindow.GetElementOnCursorPosition()
 	State.SelectedJob = jobName
 
 	repo := Overview.GetRepoByLocation(State.SelectedRepo)
