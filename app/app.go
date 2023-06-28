@@ -83,10 +83,6 @@ var (
 	State    *ApplicationState
 	Conf     Config
 
-	CurrentJobsList []string
-
-	runInfos []string
-
 	userHomeDir string
 
 	Client *GraphQLClient
@@ -633,7 +629,7 @@ func GetContentByView(v *c.View) []string {
 	case JOBS_VIEW:
 		return JobsWindow.Elements
 	case RUNS_VIEW:
-		return runInfos
+		return RunsWindow.Elements
 	}
 	return []string{}
 
