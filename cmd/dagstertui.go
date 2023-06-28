@@ -80,7 +80,7 @@ func main() {
 
 	SetViewStyles(RepoWindow.View)
 	SetViewStyles(JobsWindow.View)
-	SetViewStyles(RunsView)
+	SetViewStyles(RunsWindow.View)
 	FilterView.Editable = true
 	FilterView.Editor = DefaultEditor
 

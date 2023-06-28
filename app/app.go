@@ -26,7 +26,7 @@ type ListView[T any] struct {
 	RawElements       []T
 	TransformRawToStr TransformFunc[T]
 	// TODO how to make string more generic, right now we have the assumption that the rendered elements will be a string
-	SortElementsOn    SortOnFunc[T]
+	SortElementsOn SortOnFunc[T]
 }
 
 func (w *ListView[T]) RenderView(g *c.Gui) error {
@@ -46,6 +46,11 @@ func (w *ListView[T]) SetView(g *c.Gui, viewName string) error {
 	return nil
 }
 
+func (w * ListView[T]) ResetCursor() {
+	w.View.SetOrigin(0, 0)
+	w.View.SetCursor(0,0)
+}
+
 // Replacing FillViewWithItems
 func (w *ListView[T]) RenderItems(items []T) {
 	w.RawElements = make([]T, 0)
@@ -63,7 +68,6 @@ func (w *ListView[T]) RenderItems(items []T) {
 }
 
 var (
-	RunsView            *c.View
 	RunInfoView         *c.View
 	KeyMappingsView     *c.View
 	LaunchRunWindow     *c.View
@@ -71,6 +75,7 @@ var (
 	FilterView          *c.View
 	EnvironmentInfoView *c.View
 
+	RunsWindow *ListView[s.RunRepresentation]
 	RepoWindow *ListView[s.RepositoryRepresentation]
 	JobsWindow *ListView[s.JobRepresentation]
 
@@ -153,23 +158,30 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 	return nil
 }
 
+
 func InitializeViews(g *c.Gui) error {
 	// Create windows, position is irrelevant
 	RepoWindow = &ListView[s.RepositoryRepresentation]{
 		Title:             "Repositories",
 		TransformRawToStr: func(a s.RepositoryRepresentation) string { return a.Location },
-		SortElementsOn: func(a s.RepositoryRepresentation) string { return a.Location },
+		SortElementsOn:    func(a s.RepositoryRepresentation) string { return a.Location },
 	}
 	RepoWindow.SetView(g, REPOSITORIES_VIEW)
 
 	JobsWindow = &ListView[s.JobRepresentation]{
 		Title:             "Jobs",
 		TransformRawToStr: func(a s.JobRepresentation) string { return a.Name },
-		SortElementsOn: func(a s.JobRepresentation) string { return a.Name },
+		SortElementsOn:    func(a s.JobRepresentation) string { return a.Name },
 	}
 	JobsWindow.SetView(g, JOBS_VIEW)
 
-	initializeView(g, &RunsView, RUNS_VIEW, "Runs")
+	RunsWindow = &ListView[s.RunRepresentation]{
+		Title:             "Runs",
+		TransformRawToStr: func(a s.RunRepresentation) string { return fmt.Sprintf("%s \t %s", a.Status, a.RunId) },
+		SortElementsOn:    func(a s.RunRepresentation) string { return fmt.Sprint(a.StartTime) },
+	}
+	RunsWindow.SetView(g, RUNS_VIEW)
+
 	initializeView(g, &RunInfoView, RUN_INFO_VIEW, "Run Info")
 	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
 	initializeView(g, &EnvironmentInfoView, ENVIRONMENT_INFO, "Info")
@@ -202,6 +214,10 @@ func Layout(g *c.Gui) error {
 	// left of REPOSITORIES_VIEW
 	JobsWindow.StartX, JobsWindow.StartY, JobsWindow.EndX, JobsWindow.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
 	JobsWindow.RenderView(g)
+
+	// left of JOBS_VIEW
+	RunsWindow.StartX, RunsWindow.StartY, RunsWindow.EndX, RunsWindow.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
+	RunsWindow.RenderView(g)
 
 	// on top of REPOSITORIES_VIEW
 	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
@@ -564,21 +580,14 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	pipelineRuns := Client.GetPipelineRuns(repo, State.SelectedJob, 10)
 	Overview.UpdatePipelineAndRuns(repo.Location, pipelineRuns)
 	runs := Overview.GetRunsFor(State.SelectedRepo, State.SelectedJob)
-	runInfos = make([]string, 0)
 	// TODO make headers skippable in navigation
 	// runInfos = append(runInfos, "Status \t RunId \t Time")
-	for _, run := range runs {
-		runInfos = append(runInfos, fmt.Sprintf("%s \t %s", run.Status, run.RunId))
-	}
 
-	RunsView.Title = fmt.Sprintf("%s - Runs", State.SelectedJob)
-	RunsView.Clear()
-	FillViewWithItems(RunsView, runInfos)
+	RunsWindow.Title = fmt.Sprintf("%s - Runs", State.SelectedJob)
+	RunsWindow.RenderItems(runs)
+	RunsWindow.ResetCursor()
 
-	ResetCursor(g, RUNS_VIEW)
-	RunsView.SetCursor(0, 0)
-
-	setRunInformation(RunsView)
+	setRunInformation(RunsWindow.View)
 	return SetFocus(g, RUNS_VIEW, v.Name())
 }
 
