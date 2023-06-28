@@ -33,11 +33,11 @@ type Overview struct {
 }
 
 func (o *Overview) GetRepositoryList() []RepositoryRepresentation {
-	var names []RepositoryRepresentation
+	var repoReps []RepositoryRepresentation
 	for _, v := range o.Repositories {
-		names = append(names, *v)
+		repoReps = append(repoReps, *v)
 	}
-	return names
+	return repoReps
 }
 
 func (o *Overview) GetRepositoryNames() []string {
@@ -49,12 +49,18 @@ func (o *Overview) GetRepositoryNames() []string {
 	return names
 }
 
-func (o *Overview) GetJobNamesInRepository(repo string) []string {
-	var names []string
-	for k := range o.Repositories[repo].Jobs {
-		names = append(names, k)
+
+// Maybe we dont even need this sorting
+// func GetJobName(j JobRepresentation) string {
+// 	return j.Name
+// }
+
+func (o *Overview) GetJobNamesInRepository(repo string) []JobRepresentation {
+	var names []JobRepresentation
+	for _, v := range o.Repositories[repo].Jobs {
+		names = append(names, *v)
 	}
-	sort.Strings(names)
+	// names = SortBy(names, GetJobName)
 	return names
 }
 

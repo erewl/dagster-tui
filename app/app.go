@@ -11,9 +11,10 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
 	c "github.com/jroimartin/gocui"
 )
+
+
 
 type TransformFunc[T any] func(T) string
 
@@ -46,19 +47,20 @@ func (w *Window[T]) SetView(g *c.Gui, viewName string) error {
 
 // Replacing FillViewWithItems
 func (w *Window[T]) RenderItems(items []T) {
-	w.RawElements = items
+	w.RawElements = make([]T, 0)
 	w.Elements = make([]string, 0)
-	w.View.Clear()
-	for _, item := range items {
+	w.RawElements = items
+	for _, item := range w.RawElements {
 		itemStr := w.TransformRawToStr(item)
 		w.Elements = append(w.Elements, itemStr)
-		fmt.Fprintln(w.View, itemStr)
+	}
+	w.View.Clear()
+	for _, item := range w.Elements {
+		fmt.Fprintln(w.View, item)
 	}
 }
 
 var (
-	// RepositoriesView    *c.View
-	JobsView            *c.View
 	RunsView            *c.View
 	RunInfoView         *c.View
 	KeyMappingsView     *c.View
@@ -68,6 +70,7 @@ var (
 	EnvironmentInfoView *c.View
 
 	RepoWindow *Window[s.RepositoryRepresentation]
+	JobsWindow *Window[s.JobRepresentation]
 
 	Overview *s.Overview
 	State    *ApplicationState
@@ -148,20 +151,22 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 	return nil
 }
 
-func RepoToStr(a s.RepositoryRepresentation) string {
-	return a.Name
-}
-
 func InitializeViews(g *c.Gui) error {
 	// Create windows, position is irrelevant
 	RepoWindow = &Window[s.RepositoryRepresentation]{
 		Title:             "Repositories",
-		TransformRawToStr: RepoToStr,
+		TransformRawToStr: func(a s.RepositoryRepresentation) string { return a.Location },
 	}
 	RepoWindow.SetView(g, REPOSITORIES_VIEW)
 
+	JobsWindow = &Window[s.JobRepresentation]{
+		Title:             "Jobs",
+		TransformRawToStr: func(a s.JobRepresentation) string { return a.Name },
+	}
+	JobsWindow.SetView(g, JOBS_VIEW)
+
 	// initializeView(g, &RepositoriesView, REPOSITORIES_VIEW, "Repositories")
-	initializeView(g, &JobsView, JOBS_VIEW, "Jobs")
+	// initializeView(g, &JobsView, JOBS_VIEW, "Jobs")
 	initializeView(g, &RunsView, RUNS_VIEW, "Runs")
 	initializeView(g, &RunInfoView, RUN_INFO_VIEW, "Run Info")
 	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
@@ -192,18 +197,17 @@ func Layout(g *c.Gui) error {
 	RepoWindow.StartX, RepoWindow.StartY, RepoWindow.EndX, RepoWindow.EndY = window1X, yOffset, window1X+windowWidth/2, windowHeight+1
 	RepoWindow.RenderView(g)
 
+	// left of REPOSITORIES_VIEW
+	JobsWindow.StartX, JobsWindow.StartY, JobsWindow.EndX, JobsWindow.EndY  = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
+	JobsWindow.RenderView(g)
+
 	// on top of REPOSITORIES_VIEW
 	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	// left of REPOSITORIES_VIEW
-	if _, err := g.SetView(JOBS_VIEW, window2X, yOffset, window2X+windowWidth/2, windowHeight+1); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
+
 	// most right
 	if _, err := g.SetView(RUNS_VIEW, window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0))); err != nil {
 		if err != c.ErrUnknownView {
@@ -453,7 +457,6 @@ func SetKeybindings(g *c.Gui) error {
 }
 
 func OpenConfirmationWindow(message string, options []string) (int, error) {
-
 	return 0, nil
 }
 
@@ -471,7 +474,7 @@ func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 	run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
 	Client.TerminateRun(run.RunId)
 
-	LoadRunsForJob(g, JobsView)
+	LoadRunsForJob(g, JobsWindow.View)
 	return nil
 }
 
@@ -513,8 +516,9 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 	case REPOSITORIES_VIEW:
 		filterTerm := FilterView.BufferLines()[0]
 		cond_contains_term := func(repo s.RepositoryRepresentation) bool { return strings.Contains(repo.Name, filterTerm) }
-		currentRepositoriesList := filter(Overview.GetRepositoryList(), cond_contains_term)
-		RepoWindow.RenderItems(currentRepositoriesList)
+		currentRepositoriesList := s.Filter(Overview.GetRepositoryList(), cond_contains_term)
+		sortedCurrentRepositoriesList := s.SortBy(currentRepositoriesList, func(repo s.RepositoryRepresentation) string { return repo.Name } )
+		RepoWindow.RenderItems(sortedCurrentRepositoriesList)
 	default:
 		return nil
 
@@ -539,10 +543,10 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 	Overview.AppendJobsToRepository(repo.Location, Client.GetJobsInRepository(repo))
 
-	JobsView.Title = fmt.Sprintf("%s - Jobs", locationName)
-	JobsView.Clear()
-	CurrentJobsList = Overview.GetJobNamesInRepository(locationName)
-	FillViewWithItems(JobsView, CurrentJobsList)
+	JobsWindow.View.Title = fmt.Sprintf("%s - Jobs", locationName)
+	JobsWindow.View.Clear()
+	JobsWindow.RenderItems(Overview.GetJobNamesInRepository(locationName))
+	// CurrentJobsList = Overview.GetJobNamesInRepository(locationName)
 
 	ResetCursor(g, JOBS_VIEW)
 	return SetFocus(g, JOBS_VIEW, v.Name())
@@ -581,7 +585,7 @@ func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
 	Client.LaunchRunForJob(*Overview.Repositories[State.SelectedRepo], State.SelectedJob, LaunchRunWindow.BufferLines())
 	ClosePopupView(g, LaunchRunWindow)
-	LoadRunsForJob(g, JobsView)
+	LoadRunsForJob(g, JobsWindow.View)
 
 	return nil
 }
@@ -615,9 +619,9 @@ func GetContentByView(v *c.View) []string {
 	name := v.Name()
 	switch name {
 	case REPOSITORIES_VIEW:
-		return Overview.GetRepositoryNames()
+		return RepoWindow.Elements
 	case JOBS_VIEW:
-		return CurrentJobsList
+		return JobsWindow.Elements
 	case RUNS_VIEW:
 		return runInfos
 	}

@@ -73,13 +73,14 @@ func main() {
 
 	repos := Client.LoadRepositories()
 	Overview.AppendRepositories(repos)
-	RepoWindow.RenderItems(Overview.GetRepositoryList())
+	sortedCurrentRepositoriesList := s.SortBy(Overview.GetRepositoryList(), func(repo s.RepositoryRepresentation) string { return repo.Location } )
+	RepoWindow.RenderItems(sortedCurrentRepositoriesList)
 
 	environmentInfo := []string{strings.TrimPrefix(Overview.Url, "https://")}
 	FillViewWithItems(EnvironmentInfoView, environmentInfo)
 
 	SetViewStyles(RepoWindow.View)
-	SetViewStyles(JobsView)
+	SetViewStyles(JobsWindow.View)
 	SetViewStyles(RunsView)
 	FilterView.Editable = true
 	FilterView.Editor = DefaultEditor
