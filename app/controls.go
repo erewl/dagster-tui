@@ -2,34 +2,16 @@ package app
 
 import (
 	c "github.com/jroimartin/gocui"
+	// l "nl/vdb/dagstertui/log"
 )
 
 func Quit(g *c.Gui, v *c.View) error {
 	return c.ErrQuit
 }
 
-func GetElementByCursor(v *c.View) string {
-	_, oy := v.Origin()
-	_, vy := v.Cursor()
-
-	items := GetContentByView(v)
-
-	return items[vy+oy]
-}
-
-func ResetCursor(g *c.Gui, name string) error {
-	v, err := g.View(name)
-	if err != nil {
-		return err
-	}
-	v.SetCursor(0, 0)
-	v.SetOrigin(0, 0)
-
-	return nil
-}
-
 func CursorDown(g *c.Gui, v *c.View) error {
 	items := GetContentByView(v)
+
 	cx, cy := v.Cursor()
 	_, h := v.Size()
 	var height = h
