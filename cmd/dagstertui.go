@@ -80,8 +80,7 @@ func main() {
 	SetViewStyles(RepoWindow.Base.View)
 	SetViewStyles(JobsWindow.Base.View)
 	SetViewStyles(RunsWindow.Base.View)
-	FilterView.Editable = true
-	FilterView.Editor = DefaultEditor
+
 
 	// Start main loop
 	err = g.MainLoop()

@@ -10,7 +10,7 @@ func Quit(g *c.Gui, v *c.View) error {
 }
 
 func CursorDown(g *c.Gui, v *c.View) error {
-	items := GetContentByView(v)
+	items := v.BufferLines()
 
 	cx, cy := v.Cursor()
 	_, h := v.Size()
@@ -40,7 +40,8 @@ func CursorDown(g *c.Gui, v *c.View) error {
 }
 
 func CursorUp(g *c.Gui, v *c.View) error {
-	items := GetContentByView(v)
+	items := v.BufferLines()
+
 	cx, cy := v.Cursor()
 	_, h := v.Size()
 	oX, oY := v.Origin()

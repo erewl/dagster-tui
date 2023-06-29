@@ -14,111 +14,17 @@ import (
 	"time"
 )
 
-type TransformFunc[T any] func(T) string
-type SortOnFunc[T any] func(T) string
-
-type BaseView struct {
-	View           *c.View
-	StartX, StartY int
-	EndX, EndY     int
-	Title          string
-}
-
-func (w *BaseView) RenderView(g *c.Gui, sx int, sy int, ex int, ey int) error {
-	w.StartX, w.StartY, w.EndX, w.EndY = sx, sy, ex, ey
-	_, err := g.SetView(w.View.Name(), w.StartX, w.StartY, w.EndX, w.EndY)
-	w.View.Title = w.Title
-	return err
-}
-
-func (w *BaseView) SetView(g *c.Gui, viewName string) error {
-	tempView, err := g.SetView(viewName, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	w.View = tempView
-	return nil
-}
-
-type InfoView struct {
-	Base    *BaseView
-	Content []string
-}
-
-func (w *InfoView) Initialize(g *c.Gui, title string, name string) {
-	w.Base = &BaseView{
-		Title: title,
-	}
-	w.Base.SetView(g, name)
-}
-
-func (w *InfoView) RenderContent(content []string) {
-	w.Content = content
-	w.Base.View.Clear()
-	for _, item := range w.Content {
-		fmt.Fprintln(w.Base.View, item)
-	}
-}
-
-type ListView[T any] struct {
-	Base     *BaseView
-	Elements []string
-	// TODO do we really need the RawElements
-	RawElements       []T
-	TransformRawToStr TransformFunc[T]
-	// TODO how to make string more generic, right now we have the assumption that the rendered elements will be a string
-	SortElementsOn SortOnFunc[T]
-}
-
-func (w *ListView[T]) Initialize(g *c.Gui, title string, name string, transform TransformFunc[T], sortOn SortOnFunc[T]) {
-	w.Base = &BaseView{
-		Title: title,
-	}
-	w.TransformRawToStr = transform
-	w.SortElementsOn = sortOn
-	w.Base.SetView(g, name)
-}
-
-func (w *ListView[T]) ResetCursor() {
-	w.Base.View.SetOrigin(0, 0)
-	w.Base.View.SetCursor(0, 0)
-}
-
-func (w *ListView[T]) GetElementOnCursorPosition() string {
-	_, oy := w.Base.View.Origin()
-	_, vy := w.Base.View.Cursor()
-
-	return w.Elements[vy+oy]
-}
-
-func (w *ListView[T]) RenderItems(items []T) {
-	w.RawElements = make([]T, 0)
-	w.Elements = make([]string, 0)
-	w.RawElements = s.SortBy(items, w.SortElementsOn)
-
-	for _, item := range w.RawElements {
-		itemStr := w.TransformRawToStr(item)
-		w.Elements = append(w.Elements, itemStr)
-	}
-	w.Base.View.Clear()
-	for _, item := range w.Elements {
-		fmt.Fprintln(w.Base.View, item)
-	}
-}
-
 var (
 	KeyMappingsView *c.View
 	LaunchRunWindow *c.View
 	FeedbackView    *c.View
-	FilterView      *c.View
 
-	EnvironmentInfoView *InfoView
-	RunInfoWindow       *InfoView
-	RunsWindow          *ListView[s.RunRepresentation]
-	RepoWindow          *ListView[s.RepositoryRepresentation]
-	JobsWindow          *ListView[s.JobRepresentation]
+	EnvironmentInfoView *s.InfoView
+	RunInfoWindow       *s.InfoView
+	FilterView          *s.InfoView
+	RunsWindow          *s.ListView[s.RunRepresentation]
+	RepoWindow          *s.ListView[s.RepositoryRepresentation]
+	JobsWindow          *s.ListView[s.JobRepresentation]
 
 	Overview *s.Overview
 	State    *ApplicationState
@@ -158,7 +64,6 @@ type Config struct {
 }
 
 func LoadConfig(dir string) {
-
 	// Open our jsonFile
 	jsonFile, err := os.Open(fmt.Sprintf("%s/.dagstertui/config.json", dir))
 	// if we os.Open returns an error then handle it
@@ -182,26 +87,14 @@ func SetViewStyles(v *c.View) {
 	v.Wrap = true
 }
 
-func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle string) error {
-	view, err := g.SetView(viewName, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	view.Title = viewTitle
-
-	*viewRep = view
-	return nil
-}
-
 func InitializeViews(g *c.Gui) error {
 
-	RepoWindow = &ListView[s.RepositoryRepresentation]{}
-	JobsWindow = &ListView[s.JobRepresentation]{}
-	RunsWindow = &ListView[s.RunRepresentation]{}
-	RunInfoWindow = &InfoView{}
-	EnvironmentInfoView = &InfoView{}
+	RepoWindow = &s.ListView[s.RepositoryRepresentation]{}
+	JobsWindow = &s.ListView[s.JobRepresentation]{}
+	RunsWindow = &s.ListView[s.RunRepresentation]{}
+	RunInfoWindow = &s.InfoView{}
+	EnvironmentInfoView = &s.InfoView{}
+	FilterView = &s.InfoView{}
 
 	RepoWindow.Initialize(g, "Repositories", REPOSITORIES_VIEW,
 		func(a s.RepositoryRepresentation) string { return a.Location },
@@ -215,9 +108,10 @@ func InitializeViews(g *c.Gui) error {
 
 	RunInfoWindow.Initialize(g, "Run Info", RUN_INFO_VIEW)
 	EnvironmentInfoView.Initialize(g, "Dagster Info", ENVIRONMENT_INFO)
+	FilterView.Initialize(g, "Filter", FILTER_VIEW)
 
-	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
-
+	FilterView.Base.View.Editable = true
+	FilterView.Base.View.Editor = DefaultEditor
 
 	// Set focus on main window
 	if _, err := g.SetCurrentView(REPOSITORIES_VIEW); err != nil {
@@ -243,7 +137,7 @@ func Layout(g *c.Gui) error {
 	RepoWindow.Base.RenderView(g, window1X, yOffset, window1X+windowWidth/2, windowHeight+1)
 
 	// left of REPOSITORIES_VIEW
-	JobsWindow.Base.RenderView(g,window2X, yOffset, window2X+windowWidth/2, windowHeight+1)
+	JobsWindow.Base.RenderView(g, window2X, yOffset, window2X+windowWidth/2, windowHeight+1)
 
 	// left of JOBS_VIEW /  most right
 	RunsWindow.Base.RenderView(g, window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0)))
@@ -256,12 +150,7 @@ func Layout(g *c.Gui) error {
 	EnvironmentInfoView.Base.RenderView(g, window3X+windowWidth-len(Overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1)
 
 	// on top of REPOSITORIES_VIEW
-	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-
+	FilterView.Base.RenderView(g, 0, 0, int(float64(window1X+windowWidth)), yOffset-1)
 
 	return nil
 }
@@ -548,7 +437,7 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 	g.SetCurrentView(State.PreviousActiveWindow)
 	switch State.PreviousActiveWindow {
 	case REPOSITORIES_VIEW:
-		filterTerm := FilterView.BufferLines()[0]
+		filterTerm := FilterView.Base.View.BufferLines()[0]
 		cond_contains_term := func(repo s.RepositoryRepresentation) bool { return strings.Contains(repo.Name, filterTerm) }
 		currentRepositoriesList := s.Filter(Overview.GetRepositoryList(), cond_contains_term)
 		RepoWindow.RenderItems(currentRepositoriesList)
@@ -563,7 +452,7 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 func SwitchToFilterView(g *c.Gui, v *c.View) error {
 	State.PreviousActiveWindow = v.Name()
 	g.SetCurrentView(FILTER_VIEW)
-	FilterView.Title = fmt.Sprintf("Filter %s", v.Title)
+	FilterView.Base.Title = fmt.Sprintf("Filter %s", v.Title)
 	return nil
 }
 
@@ -629,18 +518,4 @@ func SetWindowColors(g *c.Gui, viewName string, bgColor string) error {
 		// view.FgColor = c.Attribute(c.ColorGreen) | c.AttrBold
 	}
 	return nil
-}
-
-func GetContentByView(v *c.View) []string {
-	name := v.Name()
-	switch name {
-	case REPOSITORIES_VIEW:
-		return RepoWindow.Elements
-	case JOBS_VIEW:
-		return JobsWindow.Elements
-	case RUNS_VIEW:
-		return RunsWindow.Elements
-	}
-	return []string{}
-
 }
