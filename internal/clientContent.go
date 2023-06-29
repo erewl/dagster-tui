@@ -28,9 +28,8 @@ type LaunchRunResponse struct {
 type TerminateRunResponse struct {
 	Data struct {
 		TerminateRun struct {
-			Run struct {
-				RunId string `json:"runId"`
-			} `json:"run"`
+			TypeName string `json:"__typename"`
+			Message  string `json:"message"`
 		} `json:"terminateRun"`
 	} `json:"data"`
 }

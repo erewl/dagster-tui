@@ -235,7 +235,7 @@ func (c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, j
 	return response.Data.LaunchRun.Run.RunId
 }
 
-func (c *GraphQLClient) TerminateRun(runId string) {
+func (c *GraphQLClient) TerminateRun(runId string) s.TerminateRunResponse{
 	re := regexp.MustCompile(`[\s]`)
 	query := `mutation TerminateRun($runId: String!) {
 				terminateRun(runId: $runId){
@@ -291,6 +291,7 @@ func (c *GraphQLClient) TerminateRun(runId string) {
 	if err != nil {
 		log.Fatalf("Failed to read response body: %v", err)
 	}
+	return response
 }
 
 func (c *GraphQLClient) GetLogs(runId string) {

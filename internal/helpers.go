@@ -4,6 +4,10 @@ import (
     "sort"
 )
 
+func Identity[T any](s T) T {
+    return s
+}
+
 func Filter[T any](ss []T, cond func(T) bool) (ret []T) {
     for _, s := range ss {
         if cond(s) {

@@ -6,6 +6,7 @@ import (
 	c "github.com/jroimartin/gocui"
 	"io/ioutil"
 	s "nl/vdb/dagstertui/internal"
+	// l "nl/vdb/dagstertui/log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -15,15 +16,17 @@ import (
 )
 
 var (
+	ConfirmationView    *s.ListView[string]
 	LaunchRunWindow     *s.InfoView
 	FeedbackView        *s.InfoView
 	KeyMappingsView     *s.InfoView
 	EnvironmentInfoView *s.InfoView
 	RunInfoWindow       *s.InfoView
 	FilterView          *s.InfoView
-	RunsWindow          *s.ListView[s.RunRepresentation]
-	RepoWindow          *s.ListView[s.RepositoryRepresentation]
-	JobsWindow          *s.ListView[s.JobRepresentation]
+
+	RunsWindow *s.ListView[s.RunRepresentation]
+	RepoWindow *s.ListView[s.RepositoryRepresentation]
+	JobsWindow *s.ListView[s.JobRepresentation]
 
 	Overview *s.Overview
 	State    *ApplicationState
@@ -58,6 +61,11 @@ type ApplicationState struct {
 	RepoFilter string
 }
 
+func (a *ApplicationState) UpdateWindow(g *c.Gui, previousWindow string, currentWindow string) {
+	a.PreviousActiveWindow = previousWindow
+	g.SetCurrentView(currentWindow)
+}
+
 type Config struct {
 	Environments map[string]string `json:"environments"`
 }
@@ -80,20 +88,19 @@ func LoadConfig(dir string) {
 	json.Unmarshal(byteValue, &Conf)
 }
 
-func SetViewStyles(v *c.View) {
-	v.SelFgColor = c.AttrBold
-	v.SelBgColor = c.ColorRed
-	v.Wrap = true
-}
-
 func InitializeViews(g *c.Gui) error {
 
 	RepoWindow = &s.ListView[s.RepositoryRepresentation]{}
 	JobsWindow = &s.ListView[s.JobRepresentation]{}
 	RunsWindow = &s.ListView[s.RunRepresentation]{}
+
 	RunInfoWindow = &s.InfoView{}
+	FeedbackView = &s.InfoView{}
 	EnvironmentInfoView = &s.InfoView{}
 	FilterView = &s.InfoView{}
+	ConfirmationView = &s.ListView[string]{}
+	LaunchRunWindow = &s.InfoView{}
+	KeyMappingsView = &s.InfoView{}
 
 	RepoWindow.Initialize(g, "Repositories", REPOSITORIES_VIEW,
 		func(a s.RepositoryRepresentation) string { return a.Location },
@@ -111,6 +118,12 @@ func InitializeViews(g *c.Gui) error {
 
 	FilterView.Base.View.Editable = true
 	FilterView.Base.View.Editor = DefaultEditor
+
+	// OpenConfirmationWindow(g, "Terminate?", []string{"Yes", "No"})
+
+	RepoWindow.Base.SetNavigableFeedback(g)
+	JobsWindow.Base.SetNavigableFeedback(g)
+	RunsWindow.Base.SetNavigableFeedback(g)
 
 	// Set focus on main window
 	if _, err := g.SetCurrentView(REPOSITORIES_VIEW); err != nil {
@@ -206,14 +219,11 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
-	KeyMappingsView = &s.InfoView{}
 	KeyMappingsView.Initialize(g, "Key Map", KEY_MAPPINGS_VIEW)
 	KeyMappingsView.Base.RenderView(g, int(float64(maxX)*0.2), 1, int(float64(maxX)*0.8), maxY+1)
 	KeyMappingsView.RenderContent([]string{s.KeyMap})
 
-	State.PreviousActiveWindow = v.Name()
-	g.SetCurrentView(KEY_MAPPINGS_VIEW)
-
+	State.UpdateWindow(g, v.Name(), KEY_MAPPINGS_VIEW)
 	return nil
 }
 
@@ -255,7 +265,6 @@ func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
 func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
-	LaunchRunWindow = &s.InfoView{}
 	LaunchRunWindow.Initialize(g, "Launch Run For", LAUNCH_RUN_VIEW)
 	LaunchRunWindow.Base.RenderView(g, int(float64(maxX)*0.2), int(float64(maxY)*0.2), int(float64(maxX)*0.8), int(float64(maxY)*0.8))
 
@@ -275,8 +284,7 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 
 	LaunchRunWindow.RenderContent([]string{runConfig})
 
-	State.PreviousActiveWindow = v.Name()
-	g.SetCurrentView(LAUNCH_RUN_VIEW)
+	State.UpdateWindow(g, v.Name(), LAUNCH_RUN_VIEW)
 	return nil
 }
 
@@ -305,6 +313,7 @@ func SetKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding("", 'x', c.ModNone, OpenPopupKeyMaps); err != nil {
 		return err
 	}
+
 	if err := g.SetKeybinding("", 'O', c.ModNone, OpenInBrowser); err != nil {
 		return err
 	}
@@ -354,7 +363,7 @@ func SetKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(RUNS_VIEW, 'l', c.ModNone, OpenPopupLaunchWindow); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(RUNS_VIEW, 't', c.ModNone, TerminateRunWithConfirmationByRunId); err != nil {
+	if err := g.SetKeybinding(RUNS_VIEW, 't', c.ModNone, ShowTerminationOptions); err != nil {
 		panic(err)
 	}
 	if err := g.SetKeybinding(RUNS_VIEW, 'T', c.ModNone, TerminateRunByRunId); err != nil {
@@ -367,27 +376,69 @@ func SetKeybindings(g *c.Gui) error {
 		panic(err)
 	}
 
+	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyArrowDown, c.ModNone, CursorDown); err != nil {
+		panic(err)
+	}
+	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
+		panic(err)
+	}
+	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(FEEDBACK_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyEnter, c.ModNone, TerminateRunWithConfirmationByRunId); err != nil {
+		panic(err)
+	}
+
 	return nil
 }
 
-func OpenConfirmationWindow(message string, options []string) (int, error) {
-	return 0, nil
+func OpenConfirmationWindow(g *c.Gui, message string, options []string) error {
+	ConfirmationView.Initialize(g, message, CONFIRMATION_VIEW, s.Identity[string], s.Identity[string])
+	ConfirmationView.Base.RenderView(g, 10, 10, 40, 40)
+	ConfirmationView.Base.SetNavigableFeedback(g)
+
+	ConfirmationView.RenderItems(options, false)
+
+	return nil
 }
 
-func OpenFeedbackWindow(message string) error {
-	// lengthOfMessage :=  len(message)
+func OpenFeedbackWindow(g *c.Gui, v *c.View, message string) error {
+	lengthOfMessage :=  len(message)
+	FeedbackView.Initialize(g, "", FEEDBACK_VIEW)
+	FeedbackView.Base.RenderView(g, 10, 10, 10+lengthOfMessage, 20)
+	FeedbackView.RenderContent([]string{message})
+
+	State.UpdateWindow(g, v.Name(), CONFIRMATION_VIEW)
+	SetFocus(g, CONFIRMATION_VIEW, v.Name())
+	return nil
+}
+
+func ShowTerminationOptions(g *c.Gui, v *c.View) error {
+	OpenConfirmationWindow(g, "Terminate run?", []string{"Yes", "No"})
+	State.UpdateWindow(g, v.Name(), CONFIRMATION_VIEW)
+	SetFocus(g, CONFIRMATION_VIEW, v.Name())
 	return nil
 }
 
 func TerminateRunWithConfirmationByRunId(g *c.Gui, v *c.View) error {
+	d := ConfirmationView.GetElementOnCursorPosition()
+	if d == "Yes" {
+		ClosePopupView(g, ConfirmationView.Base.View)
+		return TerminateRunByRunId(g, v)
+	}
 	return nil
 }
 
 func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 	SelectedRun := RunsWindow.GetElementOnCursorPosition()
 	run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
-	Client.TerminateRun(run.RunId)
+	resp := Client.TerminateRun(run.RunId)
 
+	respStr := fmt.Sprintf("Termination Request of type: %s \n\n %s", resp.Data.TerminateRun.TypeName, resp.Data.TerminateRun.Message)
+	OpenFeedbackWindow(g, v, respStr)
 	LoadRunsForJob(g, JobsWindow.Base.View)
 	return nil
 }
@@ -440,8 +491,7 @@ func FilterItemsInView(g *c.Gui, v *c.View) error {
 }
 
 func SwitchToFilterView(g *c.Gui, v *c.View) error {
-	State.PreviousActiveWindow = v.Name()
-	g.SetCurrentView(FILTER_VIEW)
+	State.UpdateWindow(g, v.Name(), FILTER_VIEW)
 	FilterView.Base.Title = fmt.Sprintf("Filter %s", v.Title)
 	return nil
 }
@@ -491,21 +541,5 @@ func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 	ClosePopupView(g, LaunchRunWindow.Base.View)
 	LoadRunsForJob(g, JobsWindow.Base.View)
 
-	return nil
-}
-
-func SetWindowColors(g *c.Gui, viewName string, bgColor string) error {
-	view, err := g.View(viewName)
-	if err != nil {
-		return err
-	}
-
-	if bgColor == "" {
-		view.Highlight = false
-		view.FgColor = c.Attribute(c.ColorDefault)
-	} else {
-		view.Highlight = true
-		// view.FgColor = c.Attribute(c.ColorGreen) | c.AttrBold
-	}
 	return nil
 }

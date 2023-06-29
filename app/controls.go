@@ -1,6 +1,7 @@
 package app
 
 import (
+	// "fmt"
 	c "github.com/jroimartin/gocui"
 	// l "nl/vdb/dagstertui/log"
 )
@@ -66,6 +67,23 @@ func CursorUp(g *c.Gui, v *c.View) error {
 			v.SetCursor(cx, height-1)
 		}
 
+	}
+	return nil
+}
+
+
+func SetWindowColors(g *c.Gui, viewName string, bgColor string) error {
+	view, err := g.View(viewName)
+	if err != nil {
+		return err
+	}
+
+	if bgColor == "" {
+		view.Highlight = false
+		view.FgColor = c.Attribute(c.ColorDefault)
+	} else {
+		view.Highlight = true
+		// view.FgColor = c.Attribute(c.ColorGreen) | c.AttrBold
 	}
 	return nil
 }

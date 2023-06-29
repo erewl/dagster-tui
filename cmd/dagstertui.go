@@ -77,11 +77,6 @@ func main() {
 
 	EnvironmentInfoView.RenderContent([]string{strings.TrimPrefix(Overview.Url, "https://")})
 
-	SetViewStyles(RepoWindow.Base.View)
-	SetViewStyles(JobsWindow.Base.View)
-	SetViewStyles(RunsWindow.Base.View)
-
-
 	// Start main loop
 	err = g.MainLoop()
 	if err != nil && err != c.ErrQuit {

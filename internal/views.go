@@ -22,6 +22,12 @@ func (w *BaseView) RenderView(g *c.Gui, sx int, sy int, ex int, ey int) error {
 	return err
 }
 
+func (w *BaseView) SetNavigableFeedback(g *c.Gui) {
+	w.View.SelFgColor = c.AttrBold
+	w.View.SelBgColor = c.ColorRed
+	w.View.Wrap = true
+}
+
 func (w *BaseView) SetView(g *c.Gui, viewName string) error {
 	tempView, err := g.SetView(viewName, 0, 0, 1, 1)
 	if err != nil {
@@ -84,10 +90,15 @@ func (w *ListView[T]) GetElementOnCursorPosition() string {
 	return w.Elements[vy+oy]
 }
 
-func (w *ListView[T]) RenderItems(items []T) {
+func (w *ListView[T]) RenderItems(items []T, sort ...bool) {
+	// default sort: true
 	w.RawElements = make([]T, 0)
 	w.Elements = make([]string, 0)
-	w.RawElements = SortBy(items, w.SortElementsOn)
+	if len(sort) > 0 && !sort[0] {
+		w.RawElements = items
+	} else {
+		w.RawElements = SortBy(items, w.SortElementsOn)
+	}
 
 	for _, item := range w.RawElements {
 		itemStr := w.TransformRawToStr(item)
