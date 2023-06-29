@@ -24,20 +24,34 @@ type BaseView struct {
 	Title          string
 }
 
-type InfoView struct {
-	Base    BaseView
-	Content []string
+func (w *BaseView) RenderView(g *c.Gui, sx int, sy int, ex int, ey int) error {
+	w.StartX, w.StartY, w.EndX, w.EndY = sx, sy, ex, ey
+	_, err := g.SetView(w.View.Name(), w.StartX, w.StartY, w.EndX, w.EndY)
+	w.View.Title = w.Title
+	return err
 }
 
-func (w *InfoView) SetView(g *c.Gui, viewName string) error {
+func (w *BaseView) SetView(g *c.Gui, viewName string) error {
 	tempView, err := g.SetView(viewName, 0, 0, 1, 1)
 	if err != nil {
 		if err != c.ErrUnknownView {
 			return err
 		}
 	}
-	w.Base.View = tempView
+	w.View = tempView
 	return nil
+}
+
+type InfoView struct {
+	Base    *BaseView
+	Content []string
+}
+
+func (w *InfoView) Initialize(g *c.Gui, title string, name string) {
+	w.Base = &BaseView{
+		Title: title,
+	}
+	w.Base.SetView(g, name)
 }
 
 func (w *InfoView) RenderContent(content []string) {
@@ -48,36 +62,23 @@ func (w *InfoView) RenderContent(content []string) {
 	}
 }
 
-func (w *InfoView) RenderView(g *c.Gui) error {
-	_, err := g.SetView(w.Base.View.Name(), w.Base.StartX, w.Base.StartY, w.Base.EndX, w.Base.EndY)
-	w.Base.View.Title = w.Base.Title
-	return err
-}
-
 type ListView[T any] struct {
-	Base              BaseView
-	Elements          []string
+	Base     *BaseView
+	Elements []string
+	// TODO do we really need the RawElements
 	RawElements       []T
 	TransformRawToStr TransformFunc[T]
 	// TODO how to make string more generic, right now we have the assumption that the rendered elements will be a string
 	SortElementsOn SortOnFunc[T]
 }
 
-func (w *ListView[T]) RenderView(g *c.Gui) error {
-	_, err := g.SetView(w.Base.View.Name(), w.Base.StartX, w.Base.StartY, w.Base.EndX, w.Base.EndY)
-	w.Base.View.Title = w.Base.Title
-	return err
-}
-
-func (w *ListView[T]) SetView(g *c.Gui, viewName string) error {
-	tempView, err := g.SetView(viewName, 0, 0, 1, 1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
+func (w *ListView[T]) Initialize(g *c.Gui, title string, name string, transform TransformFunc[T], sortOn SortOnFunc[T]) {
+	w.Base = &BaseView{
+		Title: title,
 	}
-	w.Base.View = tempView
-	return nil
+	w.TransformRawToStr = transform
+	w.SortElementsOn = sortOn
+	w.Base.SetView(g, name)
 }
 
 func (w *ListView[T]) ResetCursor() {
@@ -108,16 +109,16 @@ func (w *ListView[T]) RenderItems(items []T) {
 }
 
 var (
-	KeyMappingsView     *c.View
-	LaunchRunWindow     *c.View
-	FeedbackView        *c.View
-	FilterView          *c.View
-	EnvironmentInfoView *c.View
+	KeyMappingsView *c.View
+	LaunchRunWindow *c.View
+	FeedbackView    *c.View
+	FilterView      *c.View
 
-	RunInfoWindow *InfoView
-	RunsWindow    *ListView[s.RunRepresentation]
-	RepoWindow    *ListView[s.RepositoryRepresentation]
-	JobsWindow    *ListView[s.JobRepresentation]
+	EnvironmentInfoView *InfoView
+	RunInfoWindow       *InfoView
+	RunsWindow          *ListView[s.RunRepresentation]
+	RepoWindow          *ListView[s.RepositoryRepresentation]
+	JobsWindow          *ListView[s.JobRepresentation]
 
 	Overview *s.Overview
 	State    *ApplicationState
@@ -195,42 +196,28 @@ func initializeView(g *c.Gui, viewRep **c.View, viewName string, viewTitle strin
 }
 
 func InitializeViews(g *c.Gui) error {
-	// Create windows, position is irrelevant
-	RepoWindow = &ListView[s.RepositoryRepresentation]{
-		Base: BaseView{
-			Title: "Repositories",
-		},
-		TransformRawToStr: func(a s.RepositoryRepresentation) string { return a.Location },
-		SortElementsOn:    func(a s.RepositoryRepresentation) string { return a.Location },
-	}
-	RepoWindow.SetView(g, REPOSITORIES_VIEW)
 
-	JobsWindow = &ListView[s.JobRepresentation]{
-		Base: BaseView{
-			Title: "Jobs",
-		}, TransformRawToStr: func(a s.JobRepresentation) string { return a.Name },
-		SortElementsOn: func(a s.JobRepresentation) string { return a.Name },
-	}
-	JobsWindow.SetView(g, JOBS_VIEW)
+	RepoWindow = &ListView[s.RepositoryRepresentation]{}
+	JobsWindow = &ListView[s.JobRepresentation]{}
+	RunsWindow = &ListView[s.RunRepresentation]{}
+	RunInfoWindow = &InfoView{}
+	EnvironmentInfoView = &InfoView{}
 
-	RunsWindow = &ListView[s.RunRepresentation]{
-		Base: BaseView{
-			Title: "Runs",
-		},
-		TransformRawToStr: func(a s.RunRepresentation) string { return fmt.Sprintf("%s \t %s", a.Status, a.RunId) },
-		SortElementsOn:    func(a s.RunRepresentation) string { return fmt.Sprint(a.StartTime) },
-	}
-	RunsWindow.SetView(g, RUNS_VIEW)
+	RepoWindow.Initialize(g, "Repositories", REPOSITORIES_VIEW,
+		func(a s.RepositoryRepresentation) string { return a.Location },
+		func(a s.RepositoryRepresentation) string { return a.Location })
+	JobsWindow.Initialize(g, "Jobs", JOBS_VIEW,
+		func(a s.JobRepresentation) string { return a.Name },
+		func(a s.JobRepresentation) string { return a.Name })
+	RunsWindow.Initialize(g, "Runs", RUNS_VIEW,
+		func(a s.RunRepresentation) string { return fmt.Sprintf("%s \t %s", a.Status, a.RunId) },
+		func(a s.RunRepresentation) string { return fmt.Sprint(a.StartTime) })
 
-	RunInfoWindow = &InfoView{
-		Base: BaseView{
-			Title: "Run Info",
-		},
-	}
-	RunInfoWindow.SetView(g, RUN_INFO_VIEW)
+	RunInfoWindow.Initialize(g, "Run Info", RUN_INFO_VIEW)
+	EnvironmentInfoView.Initialize(g, "Dagster Info", ENVIRONMENT_INFO)
 
 	initializeView(g, &FilterView, FILTER_VIEW, "Filter")
-	initializeView(g, &EnvironmentInfoView, ENVIRONMENT_INFO, "Info")
+
 
 	// Set focus on main window
 	if _, err := g.SetCurrentView(REPOSITORIES_VIEW); err != nil {
@@ -252,22 +239,21 @@ func Layout(g *c.Gui) error {
 
 	yOffset := 3
 
-	// Create windows
 	// most left
-	RepoWindow.Base.StartX, RepoWindow.Base.StartY, RepoWindow.Base.EndX, RepoWindow.Base.EndY = window1X, yOffset, window1X+windowWidth/2, windowHeight+1
-	RepoWindow.RenderView(g)
+	RepoWindow.Base.RenderView(g, window1X, yOffset, window1X+windowWidth/2, windowHeight+1)
 
 	// left of REPOSITORIES_VIEW
-	JobsWindow.Base.StartX, JobsWindow.Base.StartY, JobsWindow.Base.EndX, JobsWindow.Base.EndY = window2X, yOffset, window2X+windowWidth/2, windowHeight+1
-	JobsWindow.RenderView(g)
+	JobsWindow.Base.RenderView(g,window2X, yOffset, window2X+windowWidth/2, windowHeight+1)
 
 	// left of JOBS_VIEW /  most right
-	RunsWindow.Base.StartX, RunsWindow.Base.StartY, RunsWindow.Base.EndX, RunsWindow.Base.EndY = window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0))
-	RunsWindow.RenderView(g)
+	RunsWindow.Base.RenderView(g, window3X, yOffset, window3X+windowWidth, int(2.0*(windowHeight/3.0)))
 
 	// below RUNS_VIEW
-	RunInfoWindow.Base.StartX, RunInfoWindow.Base.StartY, RunInfoWindow.Base.EndX, RunInfoWindow.Base.EndY = window3X, int(2.0*(windowHeight/3.0))+1, window3X+windowWidth, windowHeight+1
-	RunInfoWindow.RenderView(g)
+	RunInfoWindow.Base.RenderView(g, window3X, int(2.0*(windowHeight/3.0))+1, window3X+windowWidth, windowHeight+1)
+
+	// top right corner
+	// TODO ok for now, but could be more content-agnostic
+	EnvironmentInfoView.Base.RenderView(g, window3X+windowWidth-len(Overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1)
 
 	// on top of REPOSITORIES_VIEW
 	if _, err := g.SetView(FILTER_VIEW, 0, 0, int(float64(window1X+windowWidth)), yOffset-1); err != nil {
@@ -276,14 +262,6 @@ func Layout(g *c.Gui) error {
 		}
 	}
 
-
-	// TODO ok for now, but could be more content-agnostic
-	// top right corner
-	if _, err := g.SetView(ENVIRONMENT_INFO, window3X+windowWidth-len(Overview.Url)-1, 0, int(float64(window3X+windowWidth)), yOffset-1); err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
 
 	return nil
 }
@@ -650,16 +628,7 @@ func SetWindowColors(g *c.Gui, viewName string, bgColor string) error {
 		view.Highlight = true
 		// view.FgColor = c.Attribute(c.ColorGreen) | c.AttrBold
 	}
-
 	return nil
-}
-
-func FillViewWithItems(v *c.View, items []string) {
-	v.Clear()
-	for _, item := range items {
-		fmt.Fprintln(v, item)
-	}
-
 }
 
 func GetContentByView(v *c.View) []string {

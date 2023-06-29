@@ -75,8 +75,7 @@ func main() {
 	Overview.AppendRepositories(repos)
 	RepoWindow.RenderItems(Overview.GetRepositoryList())
 
-	environmentInfo := []string{strings.TrimPrefix(Overview.Url, "https://")}
-	FillViewWithItems(EnvironmentInfoView, environmentInfo)
+	EnvironmentInfoView.RenderContent([]string{strings.TrimPrefix(Overview.Url, "https://")})
 
 	SetViewStyles(RepoWindow.Base.View)
 	SetViewStyles(JobsWindow.Base.View)
