@@ -15,10 +15,9 @@ import (
 )
 
 var (
-	KeyMappingsView *c.View
-	LaunchRunWindow *c.View
-	FeedbackView    *c.View
-
+	LaunchRunWindow     *s.InfoView
+	FeedbackView        *s.InfoView
+	KeyMappingsView     *s.InfoView
 	EnvironmentInfoView *s.InfoView
 	RunInfoWindow       *s.InfoView
 	FilterView          *s.InfoView
@@ -207,20 +206,14 @@ func OpenInBrowser(g *c.Gui, v *c.View) error {
 func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
-	var err error
-	KeyMappingsView, err = g.SetView(KEY_MAPPINGS_VIEW, int(float64(maxX)*0.2), 1, int(float64(maxX)*0.8), maxY+1)
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	KeyMappingsView.Clear()
-	KeyMappingsView.Title = "KeyMaps"
+	KeyMappingsView = &s.InfoView{}
+	KeyMappingsView.Initialize(g, "Key Map", KEY_MAPPINGS_VIEW)
+	KeyMappingsView.Base.RenderView(g, int(float64(maxX)*0.2), 1, int(float64(maxX)*0.8), maxY+1)
+	KeyMappingsView.RenderContent([]string{s.KeyMap})
 
 	State.PreviousActiveWindow = v.Name()
 	g.SetCurrentView(KEY_MAPPINGS_VIEW)
 
-	fmt.Fprint(KeyMappingsView, s.KeyMap)
 	return nil
 }
 
@@ -262,19 +255,15 @@ func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
 func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	maxX, maxY := g.Size()
 
-	var err error
-	LaunchRunWindow, err = g.SetView(LAUNCH_RUN_VIEW, int(float64(maxX)*0.2), int(float64(maxY)*0.2), int(float64(maxX)*0.8), int(float64(maxY)*0.8))
-	if err != nil {
-		if err != c.ErrUnknownView {
-			return err
-		}
-	}
-	LaunchRunWindow.Editable = true
-	LaunchRunWindow.Editor = DefaultEditor
-	LaunchRunWindow.Title = "Launch Run For"
-	LaunchRunWindow.Highlight = true
-	LaunchRunWindow.SelBgColor = c.ColorBlue
-	LaunchRunWindow.SetCursor(0, 0)
+	LaunchRunWindow = &s.InfoView{}
+	LaunchRunWindow.Initialize(g, "Launch Run For", LAUNCH_RUN_VIEW)
+	LaunchRunWindow.Base.RenderView(g, int(float64(maxX)*0.2), int(float64(maxY)*0.2), int(float64(maxX)*0.8), int(float64(maxY)*0.8))
+
+	LaunchRunWindow.Base.View.Editable = true
+	LaunchRunWindow.Base.View.Editor = DefaultEditor
+	LaunchRunWindow.Base.View.Highlight = true
+	LaunchRunWindow.Base.View.SelBgColor = c.ColorBlue
+	LaunchRunWindow.Base.View.SetCursor(0, 0)
 
 	runConfig := ""
 	if v.Name() == RUNS_VIEW {
@@ -283,7 +272,8 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 	} else {
 		runConfig = Overview.Repositories[State.SelectedRepo].Jobs[State.SelectedJob].DefaultRunConfigYaml
 	}
-	fmt.Fprintln(LaunchRunWindow, runConfig)
+
+	LaunchRunWindow.RenderContent([]string{runConfig})
 
 	State.PreviousActiveWindow = v.Name()
 	g.SetCurrentView(LAUNCH_RUN_VIEW)
@@ -497,8 +487,8 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
 func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
-	Client.LaunchRunForJob(*Overview.Repositories[State.SelectedRepo], State.SelectedJob, LaunchRunWindow.BufferLines())
-	ClosePopupView(g, LaunchRunWindow)
+	Client.LaunchRunForJob(*Overview.Repositories[State.SelectedRepo], State.SelectedJob, LaunchRunWindow.Base.View.BufferLines())
+	ClosePopupView(g, LaunchRunWindow.Base.View)
 	LoadRunsForJob(g, JobsWindow.Base.View)
 
 	return nil
