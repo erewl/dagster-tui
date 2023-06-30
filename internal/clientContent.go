@@ -1,4 +1,4 @@
-package datastructures
+package internal
 
 type Repository struct {
 	Name     string `json:"name"`
@@ -22,6 +22,15 @@ type LaunchRunResponse struct {
 				RunId string `json:"runId"`
 			} `json:"run"`
 		} `json:"launchRun"`
+	} `json:"data"`
+}
+
+type TerminateRunResponse struct {
+	Data struct {
+		TerminateRun struct {
+			TypeName string `json:"__typename"`
+			Message  string `json:"message"`
+		} `json:"terminateRun"`
 	} `json:"data"`
 }
 

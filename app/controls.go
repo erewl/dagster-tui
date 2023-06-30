@@ -1,15 +1,18 @@
-package main
+package app
 
 import (
-	"github.com/jroimartin/gocui"
+	// "fmt"
+	c "github.com/jroimartin/gocui"
+	// l "nl/vdb/dagstertui/log"
 )
 
-func Quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.ErrQuit
+func Quit(g *c.Gui, v *c.View) error {
+	return c.ErrQuit
 }
 
-func CursorDown(g *gocui.Gui, v *gocui.View) error {
-	items := GetContentByView(v)
+func CursorDown(g *c.Gui, v *c.View) error {
+	items := v.BufferLines()
+
 	cx, cy := v.Cursor()
 	_, h := v.Size()
 	var height = h
@@ -37,8 +40,9 @@ func CursorDown(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func CursorUp(g *gocui.Gui, v *gocui.View) error {
-	items := GetContentByView(v)
+func CursorUp(g *c.Gui, v *c.View) error {
+	items := v.BufferLines()
+
 	cx, cy := v.Cursor()
 	_, h := v.Size()
 	oX, oY := v.Origin()
@@ -67,13 +71,30 @@ func CursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func SetFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
+
+func SetWindowColors(g *c.Gui, viewName string, bgColor string) error {
+	view, err := g.View(viewName)
+	if err != nil {
+		return err
+	}
+
+	if bgColor == "" {
+		view.Highlight = false
+		view.FgColor = c.Attribute(c.ColorDefault)
+	} else {
+		view.Highlight = true
+		// view.FgColor = c.Attribute(c.ColorGreen) | c.AttrBold
+	}
+	return nil
+}
+
+func SetFocus(g *c.Gui, newViewName string, oldViewName string) error {
 	// Set focus on next view
 	_, err := g.SetCurrentView(newViewName)
 	if err != nil {
 		return err
 	}
-
+	
 	// Set background color of active window to red, and background color of inactive windows to default
 	if err := SetWindowColors(g, newViewName, "red"); err != nil {
 		return err
@@ -85,10 +106,26 @@ func SetFocus(g *gocui.Gui, newViewName string, oldViewName string) error {
 	return nil
 }
 
-func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
+func SwitchFocusDown(g *c.Gui, v *c.View) error {
 	// Get current view name
 	currentViewName := v.Name()
-	State.previousActiveWindow = currentViewName
+	State.PreviousActiveWindow = currentViewName
+
+	// Get next view name
+	nextViewName := ""
+	switch currentViewName {
+	case FILTER_VIEW:
+		nextViewName = REPOSITORIES_VIEW
+	default:
+		nextViewName = currentViewName
+	}
+	return SetFocus(g, nextViewName, currentViewName)
+}
+
+func SwitchFocusRight(g *c.Gui, v *c.View) error {
+	// Get current view name
+	currentViewName := v.Name()
+	State.PreviousActiveWindow = currentViewName
 
 	// Get next view name
 	nextViewName := ""
@@ -106,10 +143,10 @@ func SwitchFocusRight(g *gocui.Gui, v *gocui.View) error {
 	return SetFocus(g, nextViewName, currentViewName)
 }
 
-func SwitchFocusLeft(g *gocui.Gui, v *gocui.View) error {
+func SwitchFocusLeft(g *c.Gui, v *c.View) error {
 	// Get current view name
 	currentViewName := v.Name()
-	State.previousActiveWindow = currentViewName
+	State.PreviousActiveWindow = currentViewName
 
 	// Get previous view name
 	previousViewName := ""

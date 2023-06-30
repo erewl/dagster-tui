@@ -1,4 +1,4 @@
-package datastructures
+package internal
 
 import (
 	"sort"
@@ -32,6 +32,14 @@ type Overview struct {
 	Repositories map[string]*RepositoryRepresentation
 }
 
+func (o *Overview) GetRepositoryList() []RepositoryRepresentation {
+	var repoReps []RepositoryRepresentation
+	for _, v := range o.Repositories {
+		repoReps = append(repoReps, *v)
+	}
+	return repoReps
+}
+
 func (o *Overview) GetRepositoryNames() []string {
 	var names []string
 	for k := range o.Repositories {
@@ -41,12 +49,11 @@ func (o *Overview) GetRepositoryNames() []string {
 	return names
 }
 
-func (o *Overview) GetJobNamesInRepository(repo string) []string {
-	var names []string
-	for k := range o.Repositories[repo].Jobs {
-		names = append(names, k)
+func (o *Overview) GetJobNamesInRepository(repo string) []JobRepresentation {
+	var names []JobRepresentation
+	for _, v := range o.Repositories[repo].Jobs {
+		names = append(names, *v)
 	}
-	sort.Strings(names)
 	return names
 }
 
@@ -76,11 +83,11 @@ func (o *Overview) AppendJobsToRepository(location string, Jobs []Job) {
 }
 
 func (o *Overview) UpdatePipelineAndRuns(location string, pipeline PipelineOrError) {
-	selectedJob := o.Repositories[location].Jobs[pipeline.Name]
+	SelectedJob := o.Repositories[location].Jobs[pipeline.Name]
 	if len(pipeline.Presets) > 0 {
-		selectedJob.DefaultRunConfigYaml = pipeline.Presets[0].RunConfigYaml
+		SelectedJob.DefaultRunConfigYaml = pipeline.Presets[0].RunConfigYaml
 	}
-	selectedJob.Runs = make([]*RunRepresentation, 0)
+	SelectedJob.Runs = make([]*RunRepresentation, 0)
 	for _, run := range pipeline.Runs {
 		runRep := new(RunRepresentation)
 		runRep.RunId = run.RunId
@@ -89,7 +96,7 @@ func (o *Overview) UpdatePipelineAndRuns(location string, pipeline PipelineOrErr
 		runRep.RunconfigYaml = run.RunConfigYaml
 		runRep.Status = run.Status
 
-		selectedJob.Runs = append(selectedJob.Runs, runRep)
+		SelectedJob.Runs = append(SelectedJob.Runs, runRep)
 	}
 }
 
