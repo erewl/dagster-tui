@@ -61,10 +61,9 @@ type ApplicationState struct {
 	RepoFilter string
 }
 
-func (a *ApplicationState) SetNewActiveWindow(g *c.Gui, previousWindow string, currentWindow string) {
+func (a *ApplicationState) SetNewActiveWindow(g *c.Gui, previousWindow string, currentWindow string) error {
 	a.PreviousActiveWindow = previousWindow
-	g.SetCurrentView(currentWindow)
-	SetFocus(g, currentWindow, previousWindow)
+	return SetFocus(g, currentWindow, previousWindow)
 }
 
 type Config struct {
@@ -119,8 +118,6 @@ func InitializeViews(g *c.Gui) error {
 
 	FilterView.Base.View.Editable = true
 	FilterView.Base.View.Editor = FilterEditor
-
-	// OpenConfirmationWindow(g, "Terminate?", []string{"Yes", "No"})
 
 	RepoWindow.Base.SetNavigableFeedback(g)
 	JobsWindow.Base.SetNavigableFeedback(g)
@@ -190,9 +187,7 @@ func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	KeyMappingsView.Initialize(g, "Key Map", KEY_MAPPINGS_VIEW)
 	KeyMappingsView.Base.RenderView(g, int(float64(maxX)*0.2), 1, int(float64(maxX)*0.8), maxY+1)
 	KeyMappingsView.RenderContent([]string{s.KeyMap})
-
-	State.SetNewActiveWindow(g, v.Name(), KEY_MAPPINGS_VIEW)
-	return nil
+	return State.SetNewActiveWindow(g, v.Name(), KEY_MAPPINGS_VIEW)
 }
 
 var DefaultEditor c.Editor = c.EditorFunc(simpleEditor)
@@ -263,16 +258,15 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 
 	LaunchRunWindow.RenderContent([]string{runConfig})
 
-	State.SetNewActiveWindow(g, v.Name(), LAUNCH_RUN_VIEW)
-	return nil
+	return State.SetNewActiveWindow(g, v.Name(), LAUNCH_RUN_VIEW)
 }
 
 func ClosePopupView(g *c.Gui, v *c.View) error {
-	if err := g.DeleteView(v.Name()); err != nil {
+	err := State.SetNewActiveWindow(g, v.Name(), State.PreviousActiveWindow)
+	if err = g.DeleteView(v.Name()); err != nil {
 		return err
 	}
-	g.SetCurrentView(State.PreviousActiveWindow)
-	return nil
+	return err
 }
 
 func OpenConfirmationWindow(g *c.Gui, message string, options []string) error {
@@ -287,18 +281,15 @@ func OpenConfirmationWindow(g *c.Gui, message string, options []string) error {
 
 func OpenFeedbackWindow(g *c.Gui, v *c.View, message string) error {
 	lengthOfMessage := len(message)
-	FeedbackView.Initialize(g, "", FEEDBACK_VIEW)
+	FeedbackView.Initialize(g, "Termination Response", FEEDBACK_VIEW)
 	FeedbackView.Base.RenderView(g, 10, 10, 10+lengthOfMessage, 20)
 	FeedbackView.RenderContent([]string{message})
-
-	State.SetNewActiveWindow(g, v.Name(), CONFIRMATION_VIEW)
-	return nil
+	return State.SetNewActiveWindow(g, RUNS_VIEW, FEEDBACK_VIEW)
 }
 
 func ShowTerminationOptions(g *c.Gui, v *c.View) error {
 	OpenConfirmationWindow(g, "Terminate run?", []string{"Yes", "No"})
-	State.SetNewActiveWindow(g, v.Name(), CONFIRMATION_VIEW)
-	return nil
+	return State.SetNewActiveWindow(g, v.Name(), CONFIRMATION_VIEW)
 }
 
 func TerminateRunWithConfirmationByRunId(g *c.Gui, v *c.View) error {
@@ -316,8 +307,8 @@ func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 	resp := Client.TerminateRun(run.RunId)
 
 	respStr := fmt.Sprintf("Termination Request of type: %s \n\n %s", resp.Data.TerminateRun.TypeName, resp.Data.TerminateRun.Message)
+	LoadRuns(g, JobsWindow.Base.View)
 	OpenFeedbackWindow(g, v, respStr)
-	LoadRunsForJob(g, JobsWindow.Base.View)
 	return nil
 }
 
@@ -367,10 +358,10 @@ func FilterItemsInView(v *c.View) error {
 }
 
 func SwitchToFilterView(g *c.Gui, v *c.View) error {
-	State.SetNewActiveWindow(g, v.Name(), FILTER_VIEW)
 	FilterView.Base.Title = fmt.Sprintf("Filter %s", v.Title)
-	return nil
+	return State.SetNewActiveWindow(g, v.Name(), FILTER_VIEW)
 }
+
 
 func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
@@ -382,7 +373,6 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 	Overview.AppendJobsToRepository(repo.Location, Client.GetJobsInRepository(repo))
 
 	JobsWindow.Base.Title = fmt.Sprintf("%s - Jobs", locationName)
-	JobsWindow.Base.View.Clear()
 	JobsWindow.RenderItems(Overview.GetJobNamesInRepository(locationName))
 
 	JobsWindow.ResetCursor()
@@ -390,8 +380,8 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 }
 
-func LoadRunsForJob(g *c.Gui, v *c.View) error {
 
+func LoadRuns(g *c.Gui, v* c.View) {
 	jobName := JobsWindow.GetElementOnCursorPosition()
 	State.SelectedJob = jobName
 
@@ -408,6 +398,11 @@ func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	RunsWindow.ResetCursor()
 
 	setRunInformation(RunsWindow.Base.View)
+}
+
+
+func LoadRunsForJob(g *c.Gui, v *c.View) error {
+	LoadRuns(g, v)
 	return SetFocus(g, RUNS_VIEW, v.Name())
 }
 
@@ -415,7 +410,7 @@ func ValidateAndLaunchRun(g *c.Gui, v *c.View) error {
 
 	Client.LaunchRunForJob(*Overview.Repositories[State.SelectedRepo], State.SelectedJob, LaunchRunWindow.Base.View.BufferLines())
 	ClosePopupView(g, LaunchRunWindow.Base.View)
-	LoadRunsForJob(g, JobsWindow.Base.View)
+	LoadRuns(g, JobsWindow.Base.View)
 
 	return nil
 }

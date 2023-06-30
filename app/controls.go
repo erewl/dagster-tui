@@ -94,7 +94,7 @@ func SetFocus(g *c.Gui, newViewName string, oldViewName string) error {
 	if err != nil {
 		return err
 	}
-
+	
 	// Set background color of active window to red, and background color of inactive windows to default
 	if err := SetWindowColors(g, newViewName, "red"); err != nil {
 		return err
