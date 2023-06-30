@@ -23,5 +23,5 @@ jobs:
         goos: ${{ matrix.goos }}
         goarch: ${{ matrix.goarch }}
         binary_name: "dagstertui"
-        project_path: "./cmd/dagstertui.go"
+        project_path: "./cmd/"
         goversion: "https://dl.google.com/go/go1.19.1.linux-amd64.tar.gz"
