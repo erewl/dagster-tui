@@ -6,7 +6,7 @@ import (
 	c "github.com/jroimartin/gocui"
 	"io/ioutil"
 	s "nl/vdb/dagstertui/internal"
-	// l "nl/vdb/dagstertui/log"
+	l "nl/vdb/dagstertui/log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -27,6 +27,7 @@ var (
 	RunsWindow *s.ListView[s.RunRepresentation]
 	RepoWindow *s.ListView[s.RepositoryRepresentation]
 	JobsWindow *s.ListView[s.JobRepresentation]
+	LogWindow  *s.ListView[string]
 
 	Overview *s.Overview
 	State    *ApplicationState
@@ -42,6 +43,7 @@ const (
 	REPOSITORIES_VIEW = "repositories"
 	JOBS_VIEW         = "jobs"
 	RUNS_VIEW         = "runs"
+	LOG_VIEW          = "logs"
 	RUN_INFO_VIEW     = "run_info"
 	KEY_MAPPINGS_VIEW = "keymaps"
 	LAUNCH_RUN_VIEW   = "launch_run"
@@ -301,6 +303,16 @@ func TerminateRunWithConfirmationByRunId(g *c.Gui, v *c.View) error {
 	return nil
 }
 
+func GetLogsByRunId(g *c.Gui, v *c.View) error {
+	SelectedRun := RunsWindow.GetElementOnCursorPosition()
+	run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
+	resp := Client.GetLogs(run.RunId)
+	for _, r := range resp.Data.LogsForRun.Events {
+		l.WriteToLog(fmt.Sprintf("%s \t\t %s", r.Level, r.Message))
+	}
+	return nil
+}
+
 func TerminateRunByRunId(g *c.Gui, v *c.View) error {
 	SelectedRun := RunsWindow.GetElementOnCursorPosition()
 	run := Overview.FindRunIdBySubstring(State.SelectedRepo, State.SelectedJob, SelectedRun)
@@ -362,7 +374,6 @@ func SwitchToFilterView(g *c.Gui, v *c.View) error {
 	return State.SetNewActiveWindow(g, v.Name(), FILTER_VIEW)
 }
 
-
 func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 	locationName := RepoWindow.GetElementOnCursorPosition()
@@ -380,8 +391,7 @@ func LoadJobsForRepository(g *c.Gui, v *c.View) error {
 
 }
 
-
-func LoadRuns(g *c.Gui, v* c.View) {
+func LoadRuns(g *c.Gui, v *c.View) {
 	jobName := JobsWindow.GetElementOnCursorPosition()
 	State.SelectedJob = jobName
 
@@ -399,7 +409,6 @@ func LoadRuns(g *c.Gui, v* c.View) {
 
 	setRunInformation(RunsWindow.Base.View)
 }
-
 
 func LoadRunsForJob(g *c.Gui, v *c.View) error {
 	LoadRuns(g, v)

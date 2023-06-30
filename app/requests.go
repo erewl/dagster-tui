@@ -12,6 +12,11 @@ import (
 	"strings"
 )
 
+var (
+	regexAnyWhiteSpaces  = regexp.MustCompile(`[\s]`)
+	escapeQuotationMarks = regexp.MustCompile(`"`)
+)
+
 type GraphQLClient struct {
 	Url string
 }
@@ -50,7 +55,6 @@ func (c *GraphQLClient) LoadRepositories() []s.Repository {
 }
 
 func (c *GraphQLClient) GetJobsInRepository(repository s.RepositoryRepresentation) []s.Job {
-	re := regexp.MustCompile(`[\s]`)
 	query := `query JobsQuery($repositoryLocationName: String!, $repositoryName: String!) {
 	repositoryOrError(
 		repositorySelector: {
@@ -66,7 +70,7 @@ func (c *GraphQLClient) GetJobsInRepository(repository s.RepositoryRepresentatio
 		}
 		}
 	}}`
-	query = re.ReplaceAllString(query, " ")
+	query = regexAnyWhiteSpaces.ReplaceAllString(query, " ")
 	str := fmt.Sprintf(`{
 		"query": "%s",
 		"variables": { "repositoryName": "%s", "repositoryLocationName": "%s" }
@@ -132,8 +136,8 @@ func (c *GraphQLClient) GetPipelineRuns(repository s.RepositoryRepresentation, j
 		message
 		}
 	}}`, repository.Name, jobName, repository.Location, limit)
-	query = regexp.MustCompile(`[\s]`).ReplaceAllString(query, " ")
-	query = regexp.MustCompile(`"`).ReplaceAllString(query, `\"`)
+	query = regexAnyWhiteSpaces.ReplaceAllString(query, " ")
+	query = escapeQuotationMarks.ReplaceAllString(query, `\"`)
 
 	var reqStr = []byte(fmt.Sprintf(`{ 
 		"query": "%s"
@@ -200,8 +204,8 @@ func (c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, j
 			}
 		}
 	}`
-	query = regexp.MustCompile(`[\s]`).ReplaceAllString(query, " ")
-	query = regexp.MustCompile(`"`).ReplaceAllString(query, `\"`)
+	query = regexAnyWhiteSpaces.ReplaceAllString(query, " ")
+	query = escapeQuotationMarks.ReplaceAllString(query, `\"`)
 
 	str := fmt.Sprintf(`{
 		"query": "%s",
@@ -235,8 +239,7 @@ func (c *GraphQLClient) LaunchRunForJob(repository s.RepositoryRepresentation, j
 	return response.Data.LaunchRun.Run.RunId
 }
 
-func (c *GraphQLClient) TerminateRun(runId string) s.TerminateRunResponse{
-	re := regexp.MustCompile(`[\s]`)
+func (c *GraphQLClient) TerminateRun(runId string) s.TerminateRunResponse {
 	query := `mutation TerminateRun($runId: String!) {
 				terminateRun(runId: $runId){
 					__typename
@@ -258,7 +261,7 @@ func (c *GraphQLClient) TerminateRun(runId string) s.TerminateRunResponse{
 				}
 			}`
 
-	query = re.ReplaceAllString(query, " ")
+	query = regexAnyWhiteSpaces.ReplaceAllString(query, " ")
 	formattedQuery := fmt.Sprintf(`{
 		"query": "%s",
 		"variables": { "runId": "%s"}
@@ -294,28 +297,61 @@ func (c *GraphQLClient) TerminateRun(runId string) s.TerminateRunResponse{
 	return response
 }
 
-func (c *GraphQLClient) GetLogs(runId string) {
-	// example on how to fetch logs
-	// 	query LogsForRun {
-	//   logsForRun(
-	//     runId: "4c322239-fac1-45e1-bcdb-a0e5a4c27a08"
-	//   ) {
-	//     ...on EventConnection {
-	//       events {
-	//         ...on LogsCapturedEvent {
-	//           logKey
-	//           fileKey
-	//           message
-	//         }
-	//         # ...on LogMessageEvent{
-	//         #   level
-	//         #   timestamp
-	//         #   message
-	//         # }
-	//       }
-	//       cursor
-	//       hasMore
-	//     }
-	//   }
-	// }
+func (c *GraphQLClient) GetLogs(runId string) s.LogsForRunResponse {
+	query := fmt.Sprintf(`
+	query LogsForRun {
+		logsForRun(
+			runId: "%s"
+		) {
+			...on EventConnection {
+			events {
+				...on MessageEvent {
+				__typename
+				level
+				timestamp
+				message
+				}
+				...on ErrorEvent {
+				error {
+					message
+					stack
+				}
+				}
+			}
+			cursor
+			hasMore
+			}
+		}
+	}`, runId)
+
+	query = regexAnyWhiteSpaces.ReplaceAllString(query, " ")
+	query = escapeQuotationMarks.ReplaceAllString(query, `\"`)
+
+	var reqStr = []byte(fmt.Sprintf(`{ 
+		"query": "%s"
+		}`, query))
+	req, reqErr := http.NewRequest("POST", c.Url, bytes.NewBuffer(reqStr))
+	if reqErr != nil {
+		panic(reqErr)
+	}
+	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
+
+	client := &http.Client{}
+	resp, respErr := client.Do(req)
+	if respErr != nil {
+		log.Fatalf("Failed POST request: %v", respErr)
+	}
+	defer resp.Body.Close()
+
+	jsonData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("Failed to read response body: %v", err)
+	}
+
+	var response s.LogsForRunResponse
+	if err := json.Unmarshal([]byte(jsonData), &response); err != nil {
+		log.Fatalf("Failed to parse JSON: %v, %s", err, string(jsonData))
+	}
+
+	return response
 }

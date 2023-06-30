@@ -112,6 +112,9 @@ func SetKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(RUNS_VIEW, 'T', c.ModNone, TerminateRunByRunId); err != nil {
 		panic(err)
 	}
+	if err := g.SetKeybinding(RUNS_VIEW, 'i', c.ModNone, GetLogsByRunId); err != nil {
+		panic(err)
+	}
 	// if err := g.SetKeybinding(RUNS_VIEW, 'i', c.ModNone, InspectCurrentRunConfig); err != nil {
 	// panic(err)
 	// }
@@ -131,11 +134,11 @@ func SetKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyEsc, c.ModNone, ClosePopupView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(FEEDBACK_VIEW, c.KeyEsc, c.ModNone, ClosePopupView); err != nil {
-		return err
-	}
 	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyEnter, c.ModNone, TerminateRunWithConfirmationByRunId); err != nil {
 		panic(err)
+	}
+	if err := g.SetKeybinding(FEEDBACK_VIEW, c.KeyEsc, c.ModNone, ClosePopupView); err != nil {
+		return err
 	}
 
 	return nil

@@ -34,6 +34,26 @@ type TerminateRunResponse struct {
 	} `json:"data"`
 }
 
+type LogsForRunResponse struct {
+	Data struct {
+		LogsForRun struct {
+			Events []LogEvent `json:"events"`
+		} `json:"logsForRun"`
+	} `json:"data"`
+}
+
+type LogEvent struct {
+	TypeName string `json:"__typename"`
+	Level    string `json:"level"`
+	Message  string `json:"message"`
+	Error ErrorEvent `json:"error,omitempty"`
+}
+
+type ErrorEvent struct {
+	Message  string `json:"message"`
+	Stack []string `json:"stack"`
+}
+
 type Jobs struct {
 	name string
 }
