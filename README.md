@@ -15,6 +15,7 @@ In your root directory create a `~/.dagstertui` folder and in there you can crea
 
 {
     "environments": {
+        "default": "test", # fallback value for when no -e argument is given
         "test": "https://your-url-to-your-dagster.environment",
         "acce": "https://another-url-to-your-dagster.environment",
     }
@@ -23,10 +24,13 @@ In your root directory create a `~/.dagstertui` folder and in there you can crea
 
 And then you can start the dagster-tui by specifying which environment you want to target: `/path/to/dagstertui -e test`
 
+
+**Pressing 'x' will open up the the different Keybindings to navigate through the TUI**
+
 ## Local Development
 Currently using Go Version `1.19.1 darwin/amd64`
 
-Build with:
+Install from source with:
 
 ```
 go install cmd/dagstertui.go
