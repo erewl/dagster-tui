@@ -106,6 +106,22 @@ func SetFocus(g *c.Gui, newViewName string, oldViewName string) error {
 	return nil
 }
 
+func SwitchFocusDown(g *c.Gui, v *c.View) error {
+	// Get current view name
+	currentViewName := v.Name()
+	State.PreviousActiveWindow = currentViewName
+
+	// Get next view name
+	nextViewName := ""
+	switch currentViewName {
+	case FILTER_VIEW:
+		nextViewName = REPOSITORIES_VIEW
+	default:
+		nextViewName = currentViewName
+	}
+	return SetFocus(g, nextViewName, currentViewName)
+}
+
 func SwitchFocusRight(g *c.Gui, v *c.View) error {
 	// Get current view name
 	currentViewName := v.Name()

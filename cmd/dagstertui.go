@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	c "github.com/jroimartin/gocui"
 	. "nl/vdb/dagstertui/app"
 	s "nl/vdb/dagstertui/internal"
 	"os"
 	"strings"
+
+	c "github.com/jroimartin/gocui"
 )
 
 var (
@@ -47,6 +48,8 @@ func main() {
 
 	// Initialize gocui
 	g, err := c.NewGui(c.Output256)
+	g.InputEsc = true
+
 	if err != nil {
 		panic(err)
 	}

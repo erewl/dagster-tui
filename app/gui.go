@@ -60,10 +60,10 @@ func SetKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding("", 'O', c.ModNone, OpenInBrowser); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(KEY_MAPPINGS_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(KEY_MAPPINGS_VIEW, c.KeyEsc, c.ModNone, ClosePopupView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, c.KeyEsc, c.ModNone, ClosePopupView); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding(LAUNCH_RUN_VIEW, c.KeyCtrlL, c.ModNone, ValidateAndLaunchRun); err != nil {
@@ -115,7 +115,10 @@ func SetKeybindings(g *c.Gui) error {
 	// if err := g.SetKeybinding(RUNS_VIEW, 'i', c.ModNone, InspectCurrentRunConfig); err != nil {
 	// panic(err)
 	// }
-	if err := g.SetKeybinding(FILTER_VIEW, c.KeyEnter, c.ModNone, FilterItemsInView); err != nil {
+	// if err := g.SetKeybinding(FILTER_VIEW, c.KeyEnter, c.ModNone, FilterItemsInView); err != nil {
+	// 	panic(err)
+	// }
+	if err := g.SetKeybinding(FILTER_VIEW, c.KeyArrowDown, c.ModNone, SwitchFocusDown); err != nil {
 		panic(err)
 	}
 
@@ -125,10 +128,10 @@ func SetKeybindings(g *c.Gui) error {
 	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyArrowUp, c.ModNone, CursorUp); err != nil {
 		panic(err)
 	}
-	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyEsc, c.ModNone, ClosePopupView); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding(FEEDBACK_VIEW, c.KeyCtrlX, c.ModNone, ClosePopupView); err != nil {
+	if err := g.SetKeybinding(FEEDBACK_VIEW, c.KeyEsc, c.ModNone, ClosePopupView); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding(CONFIRMATION_VIEW, c.KeyEnter, c.ModNone, TerminateRunWithConfirmationByRunId); err != nil {

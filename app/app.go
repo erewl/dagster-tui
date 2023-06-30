@@ -61,9 +61,10 @@ type ApplicationState struct {
 	RepoFilter string
 }
 
-func (a *ApplicationState) UpdateWindow(g *c.Gui, previousWindow string, currentWindow string) {
+func (a *ApplicationState) SetNewActiveWindow(g *c.Gui, previousWindow string, currentWindow string) {
 	a.PreviousActiveWindow = previousWindow
 	g.SetCurrentView(currentWindow)
+	SetFocus(g, currentWindow, previousWindow)
 }
 
 type Config struct {
@@ -117,7 +118,7 @@ func InitializeViews(g *c.Gui) error {
 	FilterView.Initialize(g, "Filter", FILTER_VIEW)
 
 	FilterView.Base.View.Editable = true
-	FilterView.Base.View.Editor = DefaultEditor
+	FilterView.Base.View.Editor = FilterEditor
 
 	// OpenConfirmationWindow(g, "Terminate?", []string{"Yes", "No"})
 
@@ -152,6 +153,7 @@ func openbrowser(url string) {
 }
 
 func OpenInBrowser(g *c.Gui, v *c.View) error {
+
 	switch v.Name() {
 	case REPOSITORIES_VIEW:
 		repo := State.SelectedRepo
@@ -189,11 +191,22 @@ func OpenPopupKeyMaps(g *c.Gui, v *c.View) error {
 	KeyMappingsView.Base.RenderView(g, int(float64(maxX)*0.2), 1, int(float64(maxX)*0.8), maxY+1)
 	KeyMappingsView.RenderContent([]string{s.KeyMap})
 
-	State.UpdateWindow(g, v.Name(), KEY_MAPPINGS_VIEW)
+	State.SetNewActiveWindow(g, v.Name(), KEY_MAPPINGS_VIEW)
 	return nil
 }
 
 var DefaultEditor c.Editor = c.EditorFunc(simpleEditor)
+var FilterEditor c.Editor = c.EditorFunc(filterEditor)
+
+func filterEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
+	switch {
+	case ch != 0 && mod == 0:
+		v.EditWrite(ch)
+	case key == c.KeyBackspace || key == c.KeyBackspace2:
+		v.EditDelete(true)
+	}
+	FilterItemsInView(v)
+}
 
 func simpleEditor(v *c.View, key c.Key, ch rune, mod c.Modifier) {
 	switch {
@@ -250,7 +263,7 @@ func OpenPopupLaunchWindow(g *c.Gui, v *c.View) error {
 
 	LaunchRunWindow.RenderContent([]string{runConfig})
 
-	State.UpdateWindow(g, v.Name(), LAUNCH_RUN_VIEW)
+	State.SetNewActiveWindow(g, v.Name(), LAUNCH_RUN_VIEW)
 	return nil
 }
 
@@ -273,20 +286,18 @@ func OpenConfirmationWindow(g *c.Gui, message string, options []string) error {
 }
 
 func OpenFeedbackWindow(g *c.Gui, v *c.View, message string) error {
-	lengthOfMessage :=  len(message)
+	lengthOfMessage := len(message)
 	FeedbackView.Initialize(g, "", FEEDBACK_VIEW)
 	FeedbackView.Base.RenderView(g, 10, 10, 10+lengthOfMessage, 20)
 	FeedbackView.RenderContent([]string{message})
 
-	State.UpdateWindow(g, v.Name(), CONFIRMATION_VIEW)
-	SetFocus(g, CONFIRMATION_VIEW, v.Name())
+	State.SetNewActiveWindow(g, v.Name(), CONFIRMATION_VIEW)
 	return nil
 }
 
 func ShowTerminationOptions(g *c.Gui, v *c.View) error {
 	OpenConfirmationWindow(g, "Terminate run?", []string{"Yes", "No"})
-	State.UpdateWindow(g, v.Name(), CONFIRMATION_VIEW)
-	SetFocus(g, CONFIRMATION_VIEW, v.Name())
+	State.SetNewActiveWindow(g, v.Name(), CONFIRMATION_VIEW)
 	return nil
 }
 
@@ -341,24 +352,22 @@ func CursorDownAndUpdateRunInfo(g *c.Gui, v *c.View) error {
 	return err
 }
 
-func FilterItemsInView(g *c.Gui, v *c.View) error {
-	g.SetCurrentView(State.PreviousActiveWindow)
+func FilterItemsInView(v *c.View) error {
 	switch State.PreviousActiveWindow {
 	case REPOSITORIES_VIEW:
 		filterTerm := FilterView.Base.View.BufferLines()[0]
-		cond_contains_term := func(repo s.RepositoryRepresentation) bool { return strings.Contains(repo.Name, filterTerm) }
+		cond_contains_term := func(repo s.RepositoryRepresentation) bool { return strings.Contains(repo.Location, filterTerm) }
 		currentRepositoriesList := s.Filter(Overview.GetRepositoryList(), cond_contains_term)
 		RepoWindow.RenderItems(currentRepositoriesList)
 	default:
 		return nil
 
 	}
-
 	return nil
 }
 
 func SwitchToFilterView(g *c.Gui, v *c.View) error {
-	State.UpdateWindow(g, v.Name(), FILTER_VIEW)
+	State.SetNewActiveWindow(g, v.Name(), FILTER_VIEW)
 	FilterView.Base.Title = fmt.Sprintf("Filter %s", v.Title)
 	return nil
 }
